@@ -119,8 +119,12 @@ async function refresh() {
       $('route').textContent =
         best.buyExchange + ' → ' + best.sellExchange;
 
-      $('net').textContent =
-        money(gross - Number($('cost').value));
+      if ($('includeCosts').checked) {
+  $('net').textContent =
+    money(gross - Number($('cost').value));
+} else {
+  $('net').textContent = 'Desativado';
+}
 
       $('history').textContent =
         new Date().toLocaleTimeString('pt-BR') +
@@ -143,7 +147,8 @@ async function refresh() {
         'Aguardando oportunidade positiva';
       $('route').textContent =
         'Nenhuma oportunidade confirmada';
-      $('net').textContent = '—';
+      $('net').textContent =
+  $('includeCosts').checked ? '—' : 'Desativado';
     }
 
   } catch (error) {
@@ -158,7 +163,10 @@ $('pair').addEventListener('change', refresh);
 $('min').addEventListener('change', refresh);
 $('capital').addEventListener('input', refresh);
 $('cost').addEventListener('input', refresh);
-
+$('includeCosts').addEventListener('change', () => {
+  $('cost').disabled = !$('includeCosts').checked;
+  refresh();
+});
 // Menu lateral
 const sidebar = $('sidebar');
 const backdrop = document.createElement('div');
