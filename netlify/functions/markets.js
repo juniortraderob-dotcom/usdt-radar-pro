@@ -184,9 +184,15 @@ async function getBybitQuote(pair) {
   const symbol = pair.replace('/', '');
 
   const instrumentResponse = await fetch(
-    `https://api.bybit.com/v5/market/instruments-info?category=spot&symbol=${symbol}`,
-    { signal: AbortSignal.timeout(8000) }
-  );
+  `https://api.bybit.com/v5/market/instruments-info?category=spot&symbol=${symbol}`,
+  {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0'
+    },
+    signal: AbortSignal.timeout(12000)
+  }
+);
 
   if (!instrumentResponse.ok) {
   throw new Error(`Mercados HTTP ${instrumentResponse.status}`);
@@ -207,9 +213,15 @@ async function getBybitQuote(pair) {
   }
 
   const response = await fetch(
-    `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}&limit=5`,
-    { signal: AbortSignal.timeout(8000) }
-  );
+  `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}&limit=5`,
+  {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0'
+    },
+    signal: AbortSignal.timeout(12000)
+  }
+);
 
   if (!response.ok) {
   throw new Error(`Livro HTTP ${response.status}`);
