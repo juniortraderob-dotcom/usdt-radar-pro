@@ -432,7 +432,43 @@ async function getKucoinQuote(pair) {
     )
   };
 }
+async function getFoxbitQuote(pair) {
+  const [base, quote] = pair.toLowerCase().split('/');
 
+  const marketsData = await getJson(
+    'https://api.foxbit.com.br/rest/v3/markets'
+  );
+
+  const market = marketsData.data?.find(
+    item =>
+      item.base?.symbol === base &&
+      item.quote?.symbol === quote
+  );
+
+  if (!market) {
+    return { status: 'Par não disponível', quote: null };
+  }
+
+  const book = await getJson(
+    `https://api.foxbit.com.br/rest/v3/markets/${encodeURIComponent(market.symbol)}/orderbook`
+  );
+
+  if (!book.bids?.length || !book.asks?.length) {
+    return { status: 'Livro vazio', quote: null };
+  }
+
+  return {
+    status: 'Online',
+    quote: makeQuote(
+      'Foxbit',
+      pair,
+      Number(book.bids[0][0]) / (10 ** market.price_precision),
+      book.bids[0][1],
+      Number(book.asks[0][0]) / (10 ** market.price_precision),
+      book.asks[0][1]
+    )
+  };
+}
 function errorResult(error) {
   const message = String(error?.message || 'Erro desconhecido')
     .replace(/[\r\n]/g, ' ')
