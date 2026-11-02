@@ -1,4 +1,3 @@
-
 const exchanges = [
   'Binance',
   'OKX',
@@ -10,7 +9,8 @@ const exchanges = [
   'Bitso',
   'MEXC',
   'KuCoin',
-  'Coinext'
+  'Coinext',
+  'Foxbit'
 ];
 
 const binanceSymbols = {
@@ -323,13 +323,11 @@ async function getBitgetQuote(pair) {
   };
 }
 
-
 async function getMexcQuote(pair) {
-    if (pair !== 'USDT/BRL') {
+  if (pair !== 'USDT/BRL') {
     return { status: 'Par não disponível', quote: null };
-    }
-  // Na MEXC, o mercado é BRL/USDT.
-  // Vamos converter os preços para USDT/BRL no radar.
+  }
+
   const symbol = 'BRLUSDT';
 
   const instruments = await getJson(
@@ -370,7 +368,6 @@ async function getMexcQuote(pair) {
     return { status: 'Dados inválidos', quote: null };
   }
 
-  // Inversão dos preços e conversão das quantidades.
   const normalizedBid = 1 / originalAsk;
   const normalizedAsk = 1 / originalBid;
 
@@ -392,7 +389,6 @@ async function getMexcQuote(pair) {
     )
   };
 }
-
 
 async function getKucoinQuote(pair) {
   const symbol = pair.replace('/', '-');
@@ -432,6 +428,7 @@ async function getKucoinQuote(pair) {
     )
   };
 }
+
 async function getFoxbitQuote(pair) {
   const [base, quote] = pair.toLowerCase().split('/');
 
@@ -469,6 +466,7 @@ async function getFoxbitQuote(pair) {
     )
   };
 }
+
 function errorResult(error) {
   const message = String(error?.message || 'Erro desconhecido')
     .replace(/[\r\n]/g, ' ')
@@ -482,16 +480,16 @@ function errorResult(error) {
 
 exports.handler = async event => {
   const allowedPairs = [
-  'USDT/BRL',
-  'USDT/BRLA',
-  'USDT/BRL1',
-  'USDT/BRZ',
-  'BTC/BRL',
-  'ETH/BRL',
-  'SOL/BRL',
-  'XRP/BRL',
-  'TRX/BRL'
-];
+    'USDT/BRL',
+    'USDT/BRLA',
+    'USDT/BRL1',
+    'USDT/BRZ',
+    'BTC/BRL',
+    'ETH/BRL',
+    'SOL/BRL',
+    'XRP/BRL',
+    'TRX/BRL'
+  ];
 
   const requestedPair =
     event.queryStringParameters?.pair || 'USDT/BRL';
@@ -507,7 +505,7 @@ exports.handler = async event => {
     ['Bybit', getBybitQuote],
     ['Ripio', getRipioQuote],
     ['Bitget', getBitgetQuote],
-        ['MEXC', getMexcQuote],
+    ['MEXC', getMexcQuote],
     ['KuCoin', getKucoinQuote],
     ['Foxbit', getFoxbitQuote]
   ];
@@ -537,6 +535,44 @@ exports.handler = async event => {
   const onlineCount = Object.values(statuses)
     .filter(status => status === 'Online').length;
 
+  // Cálculo das oportunidades entre corretoras diferentes.
+  const opportunities = [];
+
+  for (const buy of quotes) {
+    for (const sell of quotes) {
+      if (
+        buy.exchange === sell.exchange ||
+        buy.pair !== sell.pair
+      ) {
+        continue;
+      }
+
+      const spreadPct =
+        ((sell.bid - buy.ask) / buy.ask) * 100;
+
+      if (!Number.isFinite(spreadPct) || spreadPct <= 0) {
+        continue;
+      }
+
+      opportunities.push({
+        buyExchange: buy.exchange,
+        sellExchange: sell.exchange,
+        pair: buy.pair,
+        ask: buy.ask,
+        bid: sell.bid,
+        spreadPct,
+        maxBaseQuantity: Math.min(
+          buy.askQuantity,
+          sell.bidQuantity
+        )
+      });
+    }
+  }
+
+  opportunities.sort(
+    (a, b) => b.spreadPct - a.spreadPct
+  );
+
   return {
     statusCode: 200,
     headers: {
@@ -549,9 +585,9 @@ exports.handler = async event => {
       onlineCount,
       statuses,
       quotes,
-      opportunities: [],
+      opportunities,
       message:
-        'Cotações públicas consultadas. Oportunidades ainda não calculadas.'
+        'Cotações públicas consultadas. Oportunidades calculadas com preços do primeiro nível do livro.'
     })
   };
 };
