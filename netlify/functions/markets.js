@@ -318,8 +318,11 @@ async function getBitgetQuote(pair) {
   };
 }
 
+
 async function getMexcQuote(pair) {
-  const symbol = pair.replace('/', '');
+  // Na MEXC, o mercado é BRL/USDT.
+  // Vamos converter os preços para USDT/BRL no radar.
+  const symbol = 'BRLUSDT';
 
   const instruments = await getJson(
     `https://api.mexc.com/api/v3/exchangeInfo?symbol=${symbol}`
@@ -344,18 +347,44 @@ async function getMexcQuote(pair) {
     return { status: 'Livro vazio', quote: null };
   }
 
+  const originalBid = Number(book.bids[0][0]);
+  const originalBidQuantity = Number(book.bids[0][1]);
+
+  const originalAsk = Number(book.asks[0][0]);
+  const originalAskQuantity = Number(book.asks[0][1]);
+
+  if (
+    originalBid <= 0 ||
+    originalAsk <= 0 ||
+    originalBidQuantity <= 0 ||
+    originalAskQuantity <= 0
+  ) {
+    return { status: 'Dados inválidos', quote: null };
+  }
+
+  // Inversão dos preços e conversão das quantidades.
+  const normalizedBid = 1 / originalAsk;
+  const normalizedAsk = 1 / originalBid;
+
+  const normalizedBidQuantity =
+    originalAskQuantity * originalAsk;
+
+  const normalizedAskQuantity =
+    originalBidQuantity * originalBid;
+
   return {
     status: 'Online',
     quote: makeQuote(
       'MEXC',
       pair,
-      book.bids[0][0],
-      book.bids[0][1],
-      book.asks[0][0],
-      book.asks[0][1]
+      normalizedBid,
+      normalizedBidQuantity,
+      normalizedAsk,
+      normalizedAskQuantity
     )
   };
 }
+
 
 async function getKucoinQuote(pair) {
   const symbol = pair.replace('/', '-');
