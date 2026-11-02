@@ -459,9 +459,9 @@ async function getFoxbitQuote(pair) {
     quote: makeQuote(
       'Foxbit',
       pair,
-      Number(book.bids[0][0]) / (10 ** market.price_precision),
+      Number(book.bids[0][0]),
       book.bids[0][1],
-      Number(book.asks[0][0]) / (10 ** market.price_precision),
+      Number(book.asks[0][0]),
       book.asks[0][1]
     )
   };
