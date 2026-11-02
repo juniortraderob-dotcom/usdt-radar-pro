@@ -34,9 +34,7 @@ async function getBinanceQuote(pair) {
 
   if (!response.ok) {
     return {
-      status: response.status === 400
-        ? 'Par não disponível'
-        : `Erro HTTP ${response.status}`,
+      status: response.status === 400 ? 'Par não disponível' : `Erro HTTP ${response.status}`,
       quote: null
     };
   }
@@ -132,11 +130,10 @@ async function getKrakenQuote(pair) {
     throw new Error(data.error.join(', '));
   }
 
-  const markets = Object.entries(data.result || {});
-
-  const market = markets.find(([key, item]) =>
-    item.wsname === pair ||
-    item.altname === pair.replace('/', '')
+  const market = Object.entries(data.result || {}).find(
+    ([key, item]) =>
+      item.wsname === pair ||
+      item.altname === pair.replace('/', '')
   );
 
   if (!market) {
@@ -183,6 +180,66 @@ async function getKrakenQuote(pair) {
   };
 }
 
+async function getBybitQuote(pair) {
+  const symbol = pair.replace('/', '');
+
+  const instrumentResponse = await fetch(
+    `https://api.bybit.com/v5/market/instruments-info?category=spot&symbol=${symbol}`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+
+  if (!instrumentResponse.ok) {
+    throw new Error('Falha ao consultar mercados Bybit');
+  }
+
+  const instruments = await instrumentResponse.json();
+
+  if (instruments.retCode !== 0) {
+    throw new Error(instruments.retMsg || 'Erro Bybit');
+  }
+
+  const market = instruments.result?.list?.find(
+    item => item.symbol === symbol && item.status === 'Trading'
+  );
+
+  if (!market) {
+    return { status: 'Par não disponível', quote: null };
+  }
+
+  const response = await fetch(
+    `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}&limit=5`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+
+  if (!response.ok) {
+    throw new Error('Falha ao consultar livro Bybit');
+  }
+
+  const result = await response.json();
+
+  if (
+    result.retCode !== 0 ||
+    !result.result?.b?.length ||
+    !result.result?.a?.length
+  ) {
+    return { status: 'Livro vazio', quote: null };
+  }
+
+  const book = result.result;
+
+  return {
+    status: 'Online',
+    quote: {
+      exchange: 'Bybit',
+      pair,
+      bid: Number(book.b[0][0]),
+      bidQuantity: Number(book.b[0][1]),
+      ask: Number(book.a[0][0]),
+      askQuantity: Number(book.a[0][1])
+    }
+  };
+}
+
 exports.handler = async (event) => {
   const pair = event.queryStringParameters?.pair || 'USDT/BRL';
 
@@ -200,6 +257,11 @@ exports.handler = async (event) => {
     getKrakenQuote(pair).catch(() => ({
       status: 'API indisponível',
       quote: null
+    })),
+
+    getBybitQuote(pair).catch(() => ({
+      status: 'API indisponível',
+      quote: null
     }))
   ]);
 
@@ -210,6 +272,7 @@ exports.handler = async (event) => {
   statuses.Binance = results[0].status;
   statuses.OKX = results[1].status;
   statuses.Kraken = results[2].status;
+  statuses.Bybit = results[3].status;
 
   const quotes = results
     .filter(result => result.quote)
