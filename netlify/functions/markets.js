@@ -17,7 +17,12 @@ const binanceSymbols = {
   'USDT/BRL': 'USDTBRL',
   'USDT/BRLA': 'USDTBRLA',
   'USDT/BRL1': 'USDTBRL1',
-  'USDT/BRZ': 'USDTBRZ'
+  'USDT/BRZ': 'USDTBRZ',
+  'BTC/BRL': 'BTCBRL',
+  'ETH/BRL': 'ETHBRL',
+  'SOL/BRL': 'SOLBRL',
+  'XRP/BRL': 'XRPBRL',
+  'TRX/BRL': 'TRXBRL'
 };
 
 const timeout = 12000;
@@ -320,6 +325,9 @@ async function getBitgetQuote(pair) {
 
 
 async function getMexcQuote(pair) {
+    if (pair !== 'USDT/BRL') {
+    return { status: 'Par não disponível', quote: null };
+    }
   // Na MEXC, o mercado é BRL/USDT.
   // Vamos converter os preços para USDT/BRL no radar.
   const symbol = 'BRLUSDT';
@@ -438,11 +446,16 @@ function errorResult(error) {
 
 exports.handler = async event => {
   const allowedPairs = [
-    'USDT/BRL',
-    'USDT/BRLA',
-    'USDT/BRL1',
-    'USDT/BRZ'
-  ];
+  'USDT/BRL',
+  'USDT/BRLA',
+  'USDT/BRL1',
+  'USDT/BRZ',
+  'BTC/BRL',
+  'ETH/BRL',
+  'SOL/BRL',
+  'XRP/BRL',
+  'TRX/BRL'
+];
 
   const requestedPair =
     event.queryStringParameters?.pair || 'USDT/BRL';
