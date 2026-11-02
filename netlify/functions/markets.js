@@ -189,7 +189,7 @@ async function getBybitQuote(pair) {
   );
 
   if (!instrumentResponse.ok) {
-    throw new Error('Falha ao consultar mercados Bybit');
+  throw new Error(`Mercados HTTP ${instrumentResponse.status}`);
   }
 
   const instruments = await instrumentResponse.json();
@@ -212,8 +212,8 @@ async function getBybitQuote(pair) {
   );
 
   if (!response.ok) {
-    throw new Error('Falha ao consultar livro Bybit');
-  }
+  throw new Error(`Livro HTTP ${response.status}`);
+}
 
   const result = await response.json();
 
@@ -259,10 +259,10 @@ exports.handler = async (event) => {
       quote: null
     })),
 
-    getBybitQuote(pair).catch(() => ({
-      status: 'API indisponível',
-      quote: null
-    }))
+    getBybitQuote(pair).catch(error => ({
+  status: `Erro: ${error.message}`,
+  quote: null
+}))
   ]);
 
   const statuses = Object.fromEntries(
