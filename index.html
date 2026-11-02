@@ -120,20 +120,26 @@
       </section>
 
       <section class="panel" id="settings">
-        <h2>Custos da operação</h2>
-        <p>Informe o custo total estimado para calcular o lucro líquido.</p>
+  <h2>Configuração das taxas</h2>
 
-        <label>
-          Custo total (R$)
-          <input id="cost" type="number" min="0" step="0.01" value="0">
-        </label>
+  <label>
+    <input id="includeCosts" type="checkbox">
+    Considerar taxas e custos no cálculo
+  </label>
 
-        <p>Lucro líquido estimado: <b id="net">—</b></p>
+  <p>Deixe desmarcado para visualizar somente o lucro bruto.</p>
 
-        <small>
-          O spread bruto permanece visível, mesmo quando os custos são informados.
-        </small>
-      </section>
+  <label>
+    Custo total da operação (R$)
+    <input id="cost" type="number" min="0" step="0.01" value="0" disabled>
+  </label>
+
+  <p>Lucro líquido estimado: <b id="net">Desativado</b></p>
+
+  <small>
+    O lucro bruto continuará sendo exibido independentemente dessa opção.
+  </small>
+</section>
     </div>
 
     <section class="panel">
