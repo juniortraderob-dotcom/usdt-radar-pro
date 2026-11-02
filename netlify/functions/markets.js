@@ -116,6 +116,73 @@ async function getOkxQuote(pair) {
   };
 }
 
+async function getKrakenQuote(pair) {
+  const response = await fetch(
+    'https://api.kraken.com/0/public/AssetPairs',
+    { signal: AbortSignal.timeout(8000) }
+  );
+
+  if (!response.ok) {
+    throw new Error('Falha ao consultar mercados Kraken');
+  }
+
+  const data = await response.json();
+
+  if (data.error?.length) {
+    throw new Error(data.error.join(', '));
+  }
+
+  const markets = Object.entries(data.result || {});
+
+  const market = markets.find(([key, item]) =>
+    item.wsname === pair ||
+    item.altname === pair.replace('/', '')
+  );
+
+  if (!market) {
+    return { status: 'Par não disponível', quote: null };
+  }
+
+  const [marketKey, marketInfo] = market;
+
+  if (marketInfo.status !== 'online') {
+    return { status: 'Mercado indisponível', quote: null };
+  }
+
+  const bookResponse = await fetch(
+    `https://api.kraken.com/0/public/Depth?pair=${encodeURIComponent(marketKey)}&count=5`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+
+  if (!bookResponse.ok) {
+    throw new Error('Falha ao consultar livro Kraken');
+  }
+
+  const bookData = await bookResponse.json();
+
+  if (bookData.error?.length) {
+    throw new Error(bookData.error.join(', '));
+  }
+
+  const book = Object.values(bookData.result || {})[0];
+
+  if (!book?.bids?.length || !book?.asks?.length) {
+    return { status: 'Livro vazio', quote: null };
+  }
+
+  return {
+    status: 'Online',
+    quote: {
+      exchange: 'Kraken',
+      pair,
+      bid: Number(book.bids[0][0]),
+      bidQuantity: Number(book.bids[0][1]),
+      ask: Number(book.asks[0][0]),
+      askQuantity: Number(book.asks[0][1])
+    }
+  };
+}
+
 exports.handler = async (event) => {
   const pair = event.queryStringParameters?.pair || 'USDT/BRL';
 
@@ -128,6 +195,11 @@ exports.handler = async (event) => {
     getOkxQuote(pair).catch(() => ({
       status: 'API indisponível',
       quote: null
+    })),
+
+    getKrakenQuote(pair).catch(() => ({
+      status: 'API indisponível',
+      quote: null
     }))
   ]);
 
@@ -137,6 +209,7 @@ exports.handler = async (event) => {
 
   statuses.Binance = results[0].status;
   statuses.OKX = results[1].status;
+  statuses.Kraken = results[2].status;
 
   const quotes = results
     .filter(result => result.quote)
@@ -158,9 +231,7 @@ exports.handler = async (event) => {
       statuses,
       quotes,
       opportunities: [],
-      message: 'Cotações públicas consultadas. Nenhuma cotação simulada.'
+      message: 'Consultas públicas realizadas. Nenhuma cotação simulada.'
     })
   };
 };
-
-
