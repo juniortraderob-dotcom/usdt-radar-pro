@@ -471,8 +471,9 @@ exports.handler = async event => {
     ['Bybit', getBybitQuote],
     ['Ripio', getRipioQuote],
     ['Bitget', getBitgetQuote],
-    ['MEXC', getMexcQuote],
-    ['KuCoin', getKucoinQuote]
+        ['MEXC', getMexcQuote],
+    ['KuCoin', getKucoinQuote],
+    ['Foxbit', getFoxbitQuote]
   ];
 
   const results = await Promise.all(
