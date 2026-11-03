@@ -1,15 +1,13 @@
+
 const exchanges = [
   'Binance',
   'OKX',
   'Kraken',
   'Bybit',
   'Ripio',
-  'BitcoinTrade',
   'Bitget',
-  'Bitso',
   'MEXC',
   'KuCoin',
-  'Coinext',
   'Foxbit'
 ];
 
@@ -17,12 +15,7 @@ const binanceSymbols = {
   'USDT/BRL': 'USDTBRL',
   'USDT/BRLA': 'USDTBRLA',
   'USDT/BRL1': 'USDTBRL1',
-  'USDT/BRZ': 'USDTBRZ',
-  'BTC/BRL': 'BTCBRL',
-  'ETH/BRL': 'ETHBRL',
-  'SOL/BRL': 'SOLBRL',
-  'XRP/BRL': 'XRPBRL',
-  'TRX/BRL': 'TRXBRL'
+  'USDT/BRZ': 'USDTBRZ'
 };
 
 const timeout = 12000;
@@ -483,12 +476,7 @@ exports.handler = async event => {
     'USDT/BRL',
     'USDT/BRLA',
     'USDT/BRL1',
-    'USDT/BRZ',
-    'BTC/BRL',
-    'ETH/BRL',
-    'SOL/BRL',
-    'XRP/BRL',
-    'TRX/BRL'
+    'USDT/BRZ'
   ];
 
   const requestedPair =
