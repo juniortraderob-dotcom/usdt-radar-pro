@@ -7,12 +7,9 @@ const names = [
   'Kraken',
   'Bybit',
   'Ripio',
-  'BitcoinTrade',
   'Bitget',
-  'Bitso',
   'MEXC',
   'KuCoin',
-  'Coinext',
   'Foxbit'
 ];
 
@@ -78,8 +75,9 @@ async function refresh() {
       );
 
     $('count').textContent = filtered.length;
+
     $('online').textContent =
-      (data.onlineCount || 0) + ' / 12';
+      (data.onlineCount || 0) + ' / 9';
 
     $('updated').textContent =
       new Date().toLocaleTimeString('pt-BR');
@@ -120,11 +118,11 @@ async function refresh() {
         best.buyExchange + ' → ' + best.sellExchange;
 
       if ($('includeCosts').checked) {
-  $('net').textContent =
-    money(gross - Number($('cost').value));
-} else {
-  $('net').textContent = 'Desativado';
-}
+        $('net').textContent =
+          money(gross - Number($('cost').value));
+      } else {
+        $('net').textContent = 'Desativado';
+      }
 
       $('history').textContent =
         new Date().toLocaleTimeString('pt-BR') +
@@ -143,12 +141,15 @@ async function refresh() {
 
       $('best').textContent = '—';
       $('best').className = 'neutral';
+
       $('profit').textContent =
         'Aguardando oportunidade positiva';
+
       $('route').textContent =
         'Nenhuma oportunidade confirmada';
+
       $('net').textContent =
-  $('includeCosts').checked ? '—' : 'Desativado';
+        $('includeCosts').checked ? '—' : 'Desativado';
     }
 
   } catch (error) {
@@ -163,10 +164,12 @@ $('pair').addEventListener('change', refresh);
 $('min').addEventListener('change', refresh);
 $('capital').addEventListener('input', refresh);
 $('cost').addEventListener('input', refresh);
+
 $('includeCosts').addEventListener('change', () => {
   $('cost').disabled = !$('includeCosts').checked;
   refresh();
 });
+
 // Menu lateral
 const sidebar = $('sidebar');
 const backdrop = document.createElement('div');
