@@ -14,7 +14,8 @@ async function fetchJson(url) {
   try {
     const response = await fetch(url, {
       headers: {
-        Accept: 'application/json'
+        Accept: 'application/json',
+        'User-Agent': 'USDT-Radar-Pro/1.0'
       },
       signal: controller.signal,
       cf: {
@@ -23,11 +24,15 @@ async function fetchJson(url) {
       }
     });
 
+    const body = await response.text();
+
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(
+        `HTTP ${response.status}: ${body.slice(0, 180)}`
+      );
     }
 
-    return await response.json();
+    return JSON.parse(body);
   } finally {
     clearTimeout(timer);
   }
