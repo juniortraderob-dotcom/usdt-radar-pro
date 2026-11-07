@@ -1,9 +1,8 @@
-
 const $ = id => document.getElementById(id);
 
 const names = [
-  'Binance', 'OKX', 'Kraken', 'Bybit', 'Ripio',
-  'Bitget', 'MEXC', 'KuCoin', 'Foxbit'
+  'Binance', 'OKX', 'Bybit', 'Bitget',
+  'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
 ];
 
 function money(value) {
@@ -19,10 +18,7 @@ function color(element, value) {
     value < 0 ? 'negative' : 'neutral';
 }
 
-// Consulta a Binance diretamente pelo navegador.
 async function getBinanceQuote() {
-  const symbol = 'USDTBRL';
-
   const hosts = [
     'https://api1.binance.com',
     'https://data-api.binance.vision',
@@ -32,30 +28,23 @@ async function getBinanceQuote() {
   let lastError;
 
   for (const host of hosts) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-
-      let response;
-
-      try {
-        response = await fetch(
-          `${host}/api/v3/depth?symbol=${symbol}&limit=5`,
-          {
-            cache: 'no-store',
-            signal: controller.signal
-          }
-        );
-      } finally {
-        clearTimeout(timer);
-      }
+      const response = await fetch(
+        `${host}/api/v3/depth?symbol=USDTBRL&limit=5`,
+        {
+          cache: 'no-store',
+          signal: controller.signal
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const book = await response.json();
-
       const bid = book.bids?.[0];
       const ask = book.asks?.[0];
 
@@ -63,57 +52,61 @@ async function getBinanceQuote() {
         throw new Error('Livro de ofertas vazio');
       }
 
-      const bidPrice = Number(bid[0]);
-      const bidQuantity = Number(bid[1]);
-      const askPrice = Number(ask[0]);
-      const askQuantity = Number(ask[1]);
+      const quote = {
+        exchange: 'Binance',
+        pair: 'USDT/BRL',
+        bid: Number(bid[0]),
+        bidQuantity: Number(bid[1]),
+        ask: Number(ask[0]),
+        askQuantity: Number(ask[1])
+      };
 
       if (
-        ![bidPrice, bidQuantity, askPrice, askQuantity]
-          .every(Number.isFinite) ||
-        bidPrice <= 0 || bidQuantity <= 0 ||
-        askPrice <= 0 || askQuantity <= 0
+        ![
+          quote.bid,
+          quote.bidQuantity,
+          quote.ask,
+          quote.askQuantity
+        ].every(Number.isFinite) ||
+        quote.bid <= 0 ||
+        quote.ask <= 0 ||
+        quote.bidQuantity <= 0 ||
+        quote.askQuantity <= 0
       ) {
         throw new Error('Cotação inválida');
       }
 
-      return {
-        exchange: 'Binance',
-        pair: 'USDT/BRL',
-        bid: bidPrice,
-        bidQuantity,
-        ask: askPrice,
-        askQuantity
-      };
+      return quote;
 
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   throw lastError || new Error('Binance indisponível');
 }
 
-function renderExchanges(statuses = {}) {
+function renderExchanges(statuses) {
   const container = $('exchanges');
   container.replaceChildren();
 
-  for (const name of names) {
+  names.forEach(name => {
     const card = document.createElement('div');
     card.className = 'source';
 
-    const title = document.createTextNode(name);
+    const title = document.createElement('span');
+    title.textContent = name;
+
     const status = document.createElement('span');
-
+    status.textContent = statuses[name] || 'Integração pendente';
     status.className =
-      statuses[name] === 'Online' ? 'positive' : 'neutral';
-
-    status.textContent =
-      statuses[name] || 'Integração pendente';
+      status.textContent === 'Online' ? 'positive' : 'neutral';
 
     card.append(title, status);
     container.appendChild(card);
-  }
+  });
 }
 
 function calculateOpportunities(quotes) {
@@ -124,9 +117,7 @@ function calculateOpportunities(quotes) {
       if (
         buy.exchange === sell.exchange ||
         buy.pair !== sell.pair
-      ) {
-        continue;
-      }
+      ) continue;
 
       const spreadPct =
         ((sell.bid - buy.ask) / buy.ask) * 100;
@@ -166,36 +157,30 @@ async function refresh() {
   const quotes = [];
 
   try {
-    // Consulta MEXC e demais integrações pelo servidor.
+    // Consulta a MEXC pela API da Cloudflare.
     const response = await fetch(
       '/api/markets?pair=' + encodeURIComponent(pair),
       { cache: 'no-store' }
     );
 
     if (!response.ok) {
-      throw new Error('Erro HTTP ' + response.status);
+      throw new Error('API HTTP ' + response.status);
     }
 
     const data = await response.json();
 
     Object.assign(statuses, data.statuses || {});
+    quotes.push(...(data.quotes || []));
 
-    for (const quote of data.quotes || []) {
-      quotes.push(quote);
-    }
-
-    // Consulta direta à Binance pelo navegador.
+    // Consulta Binance diretamente no navegador.
     if (pair === 'USDT/BRL') {
       try {
-        const binanceQuote = await getBinanceQuote();
-
-        quotes.push(binanceQuote);
+        const quote = await getBinanceQuote();
+        quotes.push(quote);
         statuses.Binance = 'Online';
-
       } catch (error) {
         statuses.Binance =
-          'Erro: ' + String(error.message || 'Falha na consulta')
-            .slice(0, 90);
+          'Erro: ' + String(error.message || 'Falha').slice(0, 70);
       }
     } else {
       statuses.Binance = 'Par ainda não integrado';
@@ -206,102 +191,88 @@ async function refresh() {
     const onlineCount = Object.values(statuses)
       .filter(status => status === 'Online').length;
 
-    $('online').textContent = onlineCount + ' / ' + names.length;
+    $('online').textContent = `${onlineCount} / ${names.length}`;
 
-    // Calcula oportunidades usando as cotações reais recebidas.
     const opportunities = calculateOpportunities(quotes);
-
     const minimum = Number($('min').value) || 0;
 
     const filtered = opportunities.filter(item =>
-      item.pair === pair &&
-      Number(item.spreadPct) > minimum
+      item.pair === pair && item.spreadPct > minimum
     );
 
     $('count').textContent = filtered.length;
+    $('updated').textContent =
+      new Date().toLocaleTimeString('pt-BR');
 
-    $('updated').textContent = new Date().toLocaleTimeString('pt-BR');
-
-    if (filtered.length) {
-      $('rows').innerHTML = filtered.map(item => {
-        const spread = Number(item.spreadPct);
-        const capital = Math.max(
-          0,
-          Number($('capital').value) || 0
-        );
-
-        const profit = capital * spread / 100;
-
-        return `
-          <tr>
-            <td>${item.buyExchange}</td>
-            <td>${item.sellExchange}</td>
-            <td>${item.pair}</td>
-            <td>${money(item.ask)}</td>
-            <td>${money(item.bid)}</td>
-            <td class="positive">+${spread.toFixed(3)}%</td>
-            <td>${money(profit)}</td>
-          </tr>
-        `;
-      }).join('');
-
-      const best = filtered[0];
-      const spread = Number(best.spreadPct);
-      const capital = Math.max(
-        0,
-        Number($('capital').value) || 0
-      );
-
-      const gross = capital * spread / 100;
-
-      $('best').textContent = '+' + spread.toFixed(3) + '%';
-      color($('best'), spread);
-
-      $('profit').textContent =
-        money(gross) + ' de lucro bruto estimado';
-
-      $('route').textContent =
-        best.buyExchange + ' → ' + best.sellExchange;
-
-      $('net').textContent = $('includeCosts').checked
-        ? money(
-            gross - Math.max(
-              0,
-              Number($('cost').value) || 0
-            )
-          )
-        : 'Desativado';
-
-      $('history').textContent =
-        new Date().toLocaleTimeString('pt-BR') + ' · ' +
-        best.buyExchange + ' → ' + best.sellExchange +
-        ' · +' + spread.toFixed(3) + '%';
-
-    } else {
+    if (!filtered.length) {
       $('rows').innerHTML = `
-        <tr><td colspan="7">
-          Nenhuma oportunidade positiva confirmada para este par.
-        </td></tr>
+        <tr>
+          <td colspan="7">
+            Nenhuma oportunidade positiva confirmada para este par.
+          </td>
+        </tr>
       `;
 
       $('best').textContent = '—';
       $('best').className = 'neutral';
-      $('profit').textContent =
-        'Aguardando oportunidade positiva';
-      $('route').textContent =
-        'Nenhuma oportunidade confirmada';
+      $('profit').textContent = 'Aguardando oportunidade positiva';
+      $('route').textContent = 'Nenhuma oportunidade confirmada';
       $('net').textContent =
         $('includeCosts').checked ? '—' : 'Desativado';
+
+      return;
     }
+
+    const capital = Math.max(0, Number($('capital').value) || 0);
+
+    $('rows').innerHTML = filtered.map(item => {
+      const gross = capital * item.spreadPct / 100;
+
+      return `
+        <tr>
+          <td>${item.buyExchange}</td>
+          <td>${item.sellExchange}</td>
+          <td>${item.pair}</td>
+          <td>${money(item.ask)}</td>
+          <td>${money(item.bid)}</td>
+          <td class="positive">+${item.spreadPct.toFixed(3)}%</td>
+          <td>${money(gross)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const best = filtered[0];
+    const gross = capital * best.spreadPct / 100;
+
+    $('best').textContent = '+' + best.spreadPct.toFixed(3) + '%';
+    color($('best'), best.spreadPct);
+
+    $('profit').textContent =
+      money(gross) + ' de lucro bruto estimado';
+
+    $('route').textContent =
+      best.buyExchange + ' → ' + best.sellExchange;
+
+    $('net').textContent = $('includeCosts').checked
+      ? money(gross - Math.max(0, Number($('cost').value) || 0))
+      : 'Desativado';
+
+    $('history').textContent =
+      new Date().toLocaleTimeString('pt-BR') +
+      ' · ' + best.buyExchange +
+      ' → ' + best.sellExchange +
+      ' · +' + best.spreadPct.toFixed(3) + '%';
 
   } catch (error) {
     console.error('Erro no radar:', error);
     $('updated').textContent = 'API indisponível';
 
     $('rows').innerHTML = `
-      <tr><td colspan="7">
-        Não foi possível consultar a API. Tente atualizar novamente.
-      </td></tr>
+      <tr>
+        <td colspan="7">
+          Não foi possível consultar a API. Tente atualizar novamente.
+        </td>
+      </tr>
     `;
   }
 }
@@ -341,6 +312,9 @@ sidebar.querySelectorAll('a').forEach(link => {
   link.addEventListener('click', closeMenu);
 });
 
-renderExchanges();
+renderExchanges(
+  Object.fromEntries(names.map(name => [name, 'Integração pendente']))
+);
+
 refresh();
 setInterval(refresh, 10000);
