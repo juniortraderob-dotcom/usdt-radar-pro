@@ -1,16 +1,8 @@
-
 const $ = id => document.getElementById(id);
 
 const names = [
-  'Binance',
-  'OKX',
-  'Kraken',
-  'Bybit',
-  'Ripio',
-  'Bitget',
-  'MEXC',
-  'KuCoin',
-  'Foxbit'
+  'Binance', 'OKX', 'Kraken', 'Bybit', 'Ripio',
+  'Bitget', 'MEXC', 'KuCoin', 'Foxbit'
 ];
 
 function money(value) {
@@ -27,28 +19,32 @@ function color(element, value) {
 }
 
 function renderExchanges(statuses = {}) {
-  $('exchanges').innerHTML = names.map(name => {
-    const status = statuses[name] || 'Integração pendente';
-    const cls = status === 'Online' ? 'positive' : 'neutral';
+  const container = $('exchanges');
+  container.replaceChildren();
 
-    return `
-      <div class="source">
-        ${name}
-        <span class="${cls}">${status}</span>
-      </div>
-    `;
-  }).join('');
+  for (const name of names) {
+    const card = document.createElement('div');
+    card.className = 'source';
+
+    const title = document.createTextNode(name);
+    const status = document.createElement('span');
+
+    status.className =
+      statuses[name] === 'Online' ? 'positive' : 'neutral';
+    status.textContent = statuses[name] || 'Integração pendente';
+
+    card.append(title, status);
+    container.appendChild(card);
+  }
 }
 
 async function refresh() {
   const pair = $('pair').value;
-
   $('updated').textContent = 'Consultando...';
 
   try {
     const response = await fetch(
-      '/.netlify/functions/markets?pair=' +
-      encodeURIComponent(pair),
+      '/api/markets?pair=' + encodeURIComponent(pair),
       { cache: 'no-store' }
     );
 
@@ -57,11 +53,13 @@ async function refresh() {
     }
 
     const data = await response.json();
-
     renderExchanges(data.statuses || {});
 
     const opportunities = (data.opportunities || [])
-      .filter(item => Number.isFinite(Number(item.spreadPct)));
+      .filter(item =>
+        Number.isFinite(Number(item.spreadPct)) &&
+        Number(item.spreadPct) > 0
+      );
 
     const minimum = Number($('min').value);
 
@@ -70,23 +68,20 @@ async function refresh() {
         (!item.pair || item.pair === pair) &&
         Number(item.spreadPct) > minimum
       )
-      .sort((a, b) =>
-        Number(b.spreadPct) - Number(a.spreadPct)
-      );
+      .sort((a, b) => Number(b.spreadPct) - Number(a.spreadPct));
 
     $('count').textContent = filtered.length;
+    $('online').textContent = (data.onlineCount || 0) + ' / 9';
 
-    $('online').textContent =
-      (data.onlineCount || 0) + ' / 9';
+    $('updated').textContent = data.updatedAt
+      ? new Date(data.updatedAt).toLocaleTimeString('pt-BR')
+      : new Date().toLocaleTimeString('pt-BR');
 
-    $('updated').textContent =
-      new Date().toLocaleTimeString('pt-BR');
-
-    if (filtered.length > 0) {
+    if (filtered.length) {
       $('rows').innerHTML = filtered.map(item => {
         const spread = Number(item.spreadPct);
-        const profit =
-          Number($('capital').value) * spread / 100;
+        const capital = Math.max(0, Number($('capital').value) || 0);
+        const profit = capital * spread / 100;
 
         return `
           <tr>
@@ -95,9 +90,7 @@ async function refresh() {
             <td>${item.pair || pair}</td>
             <td>${money(item.ask)}</td>
             <td>${money(item.bid)}</td>
-            <td class="${spread > 0 ? 'positive' : 'negative'}">
-              ${spread > 0 ? '+' : ''}${spread.toFixed(3)}%
-            </td>
+            <td class="positive">+${spread.toFixed(3)}%</td>
             <td>${money(profit)}</td>
           </tr>
         `;
@@ -105,8 +98,8 @@ async function refresh() {
 
       const best = filtered[0];
       const spread = Number(best.spreadPct);
-      const gross =
-        Number($('capital').value) * spread / 100;
+      const capital = Math.max(0, Number($('capital').value) || 0);
+      const gross = capital * spread / 100;
 
       $('best').textContent = '+' + spread.toFixed(3) + '%';
       color($('best'), spread);
@@ -117,37 +110,26 @@ async function refresh() {
       $('route').textContent =
         best.buyExchange + ' → ' + best.sellExchange;
 
-      if ($('includeCosts').checked) {
-        $('net').textContent =
-          money(gross - Number($('cost').value));
-      } else {
-        $('net').textContent = 'Desativado';
-      }
+      $('net').textContent = $('includeCosts').checked
+        ? money(gross - Math.max(0, Number($('cost').value) || 0))
+        : 'Desativado';
 
       $('history').textContent =
-        new Date().toLocaleTimeString('pt-BR') +
-        ' · ' + best.buyExchange +
-        ' → ' + best.sellExchange +
+        new Date().toLocaleTimeString('pt-BR') + ' · ' +
+        best.buyExchange + ' → ' + best.sellExchange +
         ' · +' + spread.toFixed(3) + '%';
 
     } else {
       $('rows').innerHTML = `
-        <tr>
-          <td colspan="7">
-            Nenhuma oportunidade positiva confirmada.
-          </td>
-        </tr>
+        <tr><td colspan="7">
+          Nenhuma oportunidade positiva confirmada para este par.
+        </td></tr>
       `;
 
       $('best').textContent = '—';
       $('best').className = 'neutral';
-
-      $('profit').textContent =
-        'Aguardando oportunidade positiva';
-
-      $('route').textContent =
-        'Nenhuma oportunidade confirmada';
-
+      $('profit').textContent = 'Aguardando oportunidade positiva';
+      $('route').textContent = 'Nenhuma oportunidade confirmada';
       $('net').textContent =
         $('includeCosts').checked ? '—' : 'Desativado';
     }
@@ -155,10 +137,15 @@ async function refresh() {
   } catch (error) {
     console.error('Erro no radar:', error);
     $('updated').textContent = 'API indisponível';
+
+    $('rows').innerHTML = `
+      <tr><td colspan="7">
+        Não foi possível consultar a API. Tente atualizar novamente.
+      </td></tr>
+    `;
   }
 }
 
-// Atualização manual e filtros
 $('refresh').addEventListener('click', refresh);
 $('pair').addEventListener('change', refresh);
 $('min').addEventListener('change', refresh);
@@ -170,13 +157,11 @@ $('includeCosts').addEventListener('change', () => {
   refresh();
 });
 
-// Menu lateral
 const sidebar = $('sidebar');
 const backdrop = document.createElement('div');
 
 backdrop.className = 'menu-backdrop';
 backdrop.hidden = true;
-
 document.body.appendChild(backdrop);
 
 function closeMenu() {
@@ -186,7 +171,6 @@ function closeMenu() {
 
 $('menu').addEventListener('click', () => {
   const opening = !sidebar.classList.contains('open');
-
   sidebar.classList.toggle('open', opening);
   backdrop.hidden = !opening;
 });
@@ -197,8 +181,6 @@ sidebar.querySelectorAll('a').forEach(link => {
   link.addEventListener('click', closeMenu);
 });
 
-// Inicialização
 renderExchanges();
 refresh();
-
 setInterval(refresh, 10000);
