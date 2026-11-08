@@ -6,6 +6,11 @@ const names = [
   'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
 ];
 
+const tradeUrls = {
+  Binance: 'https://www.binance.com/pt-BR/trade/USDT_BRL?type=spot',
+  MEXC: 'https://www.mexc.com/pt-BR/exchange/BRL_USDT'
+};
+
 let latestOpportunities = [];
 
 function money(value) {
@@ -31,6 +36,11 @@ function setupFilters() {
       $(id).appendChild(option);
     });
   });
+
+  // O radar não terá filtro separado de positivos e negativos.
+  if ($('resultFilter')) {
+    $('resultFilter').style.display = 'none';
+  }
 }
 
 function renderExchanges(statuses) {
@@ -63,7 +73,6 @@ function validLevel(level) {
     Number(level[1]) > 0;
 }
 
-// Binance consultada diretamente pelo navegador.
 async function getBinanceQuote() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 9000);
@@ -109,7 +118,8 @@ function calculateOpportunities(quotes) {
       if (buy.exchange === sell.exchange ||
           buy.pair !== sell.pair) continue;
 
-      const spread = ((sell.bid - buy.ask) / buy.ask) * 100;
+      const spread =
+        ((sell.bid - buy.ask) / buy.ask) * 100;
 
       if (!Number.isFinite(spread)) continue;
 
@@ -131,19 +141,45 @@ function calculateOpportunities(quotes) {
   return results.sort((a, b) => b.spread - a.spread);
 }
 
+function exchangeButton(name) {
+  const url = tradeUrls[name];
+
+  if (!url) return '';
+
+  return `
+    <a class="exchange-link"
+       href="${url}"
+       target="_blank"
+       rel="noopener noreferrer">
+       Abrir ${safe(name)} ↗
+    </a>
+  `;
+}
+
 function renderOpportunities() {
-  const capital = Math.max(0, Number($('capital').value) || 0);
+  const capital = Math.max(
+    0,
+    Number($('capital').value) || 0
+  );
+
   const buy = $('buyFilter').value;
   const sell = $('sellFilter').value;
-  const filter = $('resultFilter').value;
 
-  const filtered = latestOpportunities.filter(item => {
+  // Primeiro aplica os filtros escolhidos pelo usuário.
+  const selected = latestOpportunities.filter(item => {
     if (buy !== 'all' && item.buyExchange !== buy) return false;
     if (sell !== 'all' && item.sellExchange !== sell) return false;
-    if (filter === 'positive' && item.spread <= 0) return false;
-    if (filter === 'negative' && item.spread >= 0) return false;
     return true;
   });
+
+  // Prioriza oportunidades positivas.
+  // Só mostra negativas quando não existe nenhuma positiva.
+  const positives = selected.filter(item => item.spread > 0);
+  const negatives = selected.filter(item => item.spread < 0);
+
+  const filtered = positives.length
+    ? positives
+    : negatives;
 
   $('count').textContent =
     latestOpportunities.filter(x => x.spread > 0).length;
@@ -154,22 +190,26 @@ function renderOpportunities() {
 
     $('best').textContent = '—';
     $('best').className = 'neutral';
-    $('profit').textContent = 'Nenhuma oportunidade calculável';
-    $('route').textContent = 'Aguardando cotações compatíveis';
+    $('profit').textContent = 'Aguardando oportunidade';
+    $('route').textContent = 'Nenhuma combinação disponível';
     $('net').textContent =
       $('includeCosts').checked ? '—' : 'Desativado';
+
     return;
   }
 
   $('rows').innerHTML = filtered.map(item => {
     const gross = capital * item.spread / 100;
+
     const cls = item.spread > 0
       ? 'positive'
-      : item.spread < 0 ? 'negative' : 'neutral';
+      : 'negative';
 
     return `
       <article class="opportunity-card">
+
         <div class="exchange-comparison">
+
           <div class="exchange-side buy-side">
             <small>COMPRAR USDT</small>
             <strong>${safe(item.buyExchange)}</strong>
@@ -183,44 +223,62 @@ function renderOpportunities() {
             <strong>${safe(item.sellExchange)}</strong>
             <span>BID: ${money(item.bid)}</span>
           </div>
+
         </div>
 
         <div class="opportunity-details">
           <span>Par: <b>${safe(item.pair)}</b></span>
+
           <span>Spread:
             <b class="${cls}">
               ${item.spread > 0 ? '+' : ''}${item.spread.toFixed(3)}%
             </b>
           </span>
+
           <span>Lucro/prejuízo bruto:
             <b class="${cls}">${money(gross)}</b>
           </span>
+
           <span>Quantidade disponível no primeiro nível:
             <b>${item.quantity.toFixed(4)} USDT</b>
           </span>
         </div>
-      </article>`;
+
+        <div class="exchange-buttons">
+          ${exchangeButton(item.buyExchange)}
+          ${exchangeButton(item.sellExchange)}
+        </div>
+
+      </article>
+    `;
   }).join('');
 
   const best = filtered[0];
   const gross = capital * best.spread / 100;
+
   const cls = best.spread > 0
     ? 'positive'
-    : best.spread < 0 ? 'negative' : 'neutral';
+    : 'negative';
 
   $('best').textContent =
-    (best.spread > 0 ? '+' : '') + best.spread.toFixed(3) + '%';
+    (best.spread > 0 ? '+' : '') +
+    best.spread.toFixed(3) + '%';
 
   $('best').className = cls;
 
   $('profit').textContent =
-    (gross >= 0 ? 'Lucro bruto estimado: ' : 'Prejuízo bruto estimado: ') +
+    (gross >= 0
+      ? 'Lucro bruto estimado: '
+      : 'Prejuízo bruto estimado: ') +
     money(Math.abs(gross));
 
   $('route').textContent =
     best.buyExchange + ' → ' + best.sellExchange;
 
-  const cost = Math.max(0, Number($('cost').value) || 0);
+  const cost = Math.max(
+    0,
+    Number($('cost').value) || 0
+  );
 
   $('net').textContent = $('includeCosts').checked
     ? money(gross - cost)
@@ -228,7 +286,8 @@ function renderOpportunities() {
 
   $('history').textContent =
     new Date().toLocaleTimeString('pt-BR') +
-    ' · ' + best.buyExchange + ' → ' + best.sellExchange +
+    ' · ' + best.buyExchange +
+    ' → ' + best.sellExchange +
     ' · ' + (best.spread > 0 ? '+' : '') +
     best.spread.toFixed(3) + '%';
 }
@@ -249,18 +308,31 @@ async function refresh() {
     }
 
     const data = await response.json();
-    const statuses = data.statuses || {};
-    const quotes = data.quotes || [];
 
-    // A Binance é consultada pelo navegador somente para USDT/BRL.
+    const statuses = data.statuses || {};
+    const quotes = [...(data.quotes || [])];
+
+    // Consulta direta da Binance para USDT/BRL.
     if (pair === 'USDT/BRL') {
       try {
         const binance = await getBinanceQuote();
-        quotes.push(binance);
+
+        const existing = quotes.findIndex(
+          q => q.exchange === 'Binance'
+        );
+
+        if (existing >= 0) {
+          quotes[existing] = binance;
+        } else {
+          quotes.push(binance);
+        }
+
         statuses.Binance = 'Online';
+
       } catch (error) {
         statuses.Binance = 'Erro: ' +
-          String(error.message || 'Falha na consulta').slice(0, 70);
+          String(error.message || 'Falha na consulta')
+            .slice(0, 70);
       }
     } else {
       statuses.Binance = 'Par ainda não integrado';
@@ -271,9 +343,12 @@ async function refresh() {
     const onlineCount = Object.values(statuses)
       .filter(status => status === 'Online').length;
 
-    $('online').textContent = onlineCount + ' / ' + names.length;
+    $('online').textContent =
+      onlineCount + ' / ' + names.length;
 
-    latestOpportunities = calculateOpportunities(quotes);
+    latestOpportunities =
+      calculateOpportunities(quotes);
+
     renderOpportunities();
 
     $('updated').textContent =
@@ -281,7 +356,9 @@ async function refresh() {
 
   } catch (error) {
     console.error(error);
+
     $('updated').textContent = 'Erro na consulta';
+
     $('rows').textContent =
       'Não foi possível consultar a API. Tente novamente.';
   }
@@ -291,11 +368,26 @@ setupFilters();
 
 $('refresh').addEventListener('click', refresh);
 $('pair').addEventListener('change', refresh);
-$('buyFilter').addEventListener('change', renderOpportunities);
-$('sellFilter').addEventListener('change', renderOpportunities);
-$('resultFilter').addEventListener('change', renderOpportunities);
-$('capital').addEventListener('input', renderOpportunities);
-$('cost').addEventListener('input', renderOpportunities);
+
+$('buyFilter').addEventListener(
+  'change',
+  renderOpportunities
+);
+
+$('sellFilter').addEventListener(
+  'change',
+  renderOpportunities
+);
+
+$('capital').addEventListener(
+  'input',
+  renderOpportunities
+);
+
+$('cost').addEventListener(
+  'input',
+  renderOpportunities
+);
 
 $('includeCosts').addEventListener('change', () => {
   $('cost').disabled = !$('includeCosts').checked;
@@ -303,9 +395,11 @@ $('includeCosts').addEventListener('change', () => {
 });
 
 const sidebar = $('sidebar');
+
 const backdrop = document.createElement('div');
 backdrop.className = 'menu-backdrop';
 backdrop.hidden = true;
+
 document.body.appendChild(backdrop);
 
 function closeMenu() {
@@ -315,15 +409,18 @@ function closeMenu() {
 
 $('menu').addEventListener('click', () => {
   const opening = !sidebar.classList.contains('open');
+
   sidebar.classList.toggle('open', opening);
   backdrop.hidden = !opening;
 });
 
 backdrop.addEventListener('click', closeMenu);
-sidebar.querySelectorAll('a').forEach(link =>
-  link.addEventListener('click', closeMenu)
-);
+
+sidebar.querySelectorAll('a').forEach(link => {
+  link.addEventListener('click', closeMenu);
+});
 
 renderExchanges({});
 refresh();
+
 setInterval(refresh, 10000);
