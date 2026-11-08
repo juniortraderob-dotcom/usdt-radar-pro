@@ -498,8 +498,7 @@ function checkSoundAlerts(opportunities) {
 
   if (settings.positiveEnabled && positives.length) {
     const best = positives[0];
-    const key = `${best.buyExchange}|${best.sellExchange}|${best.pair}|${best.spread.toFixed(3)}`;
-
+    const key = 'positive';
     // Evita repetir o mesmo aviso a cada atualização de 10 segundos.
     if (key !== lastPositiveAlertKey) {
       playTone('positive');
@@ -518,7 +517,7 @@ function checkSoundAlerts(opportunities) {
 
   if (settings.negativeEnabled && negatives.length) {
     const worst = negatives[0];
-    const key = `${worst.buyExchange}|${worst.sellExchange}|${worst.pair}|${worst.spread.toFixed(3)}`;
+    const key = 'negative';
 
     if (key !== lastNegativeAlertKey) {
       playTone('negative');
