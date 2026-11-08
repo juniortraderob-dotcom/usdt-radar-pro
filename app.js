@@ -26,6 +26,32 @@ let lastNegativeAlertAt = 0;
 
 const ALERT_STORAGE_KEY = 'usdtRadarProAlertSettings';
 
+const TELEGRAM_WORKER_URL =
+  'https://usdt-radar-telegram.juniortraderob.workers.dev';
+
+let lastTelegramAlertKey = '';
+let lastTelegramAlertAt = 0;
+
+async function sendTelegramAlert(message) {
+  try {
+    const response = await fetch(TELEGRAM_WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || 'Falha no envio');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Erro ao enviar alerta ao Telegram:', error);
+    return false;
+  }
+}
 function money(value) {
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -477,6 +503,12 @@ function checkSoundAlerts(opportunities) {
     // Evita repetir o mesmo aviso a cada atualização de 10 segundos.
     if (key !== lastPositiveAlertKey || now - lastPositiveAlertAt > 60000) {
       playTone('positive');
+      sendTelegramAlert(
+  `🟢 SPREAD POSITIVO: ${best.buyExchange} → ${best.sellExchange}\n` +
+  `Par: ${best.pair}\n` +
+  `Spread: +${best.spread.toFixed(3)}%\n` +
+  `Capital: ${money(Number($('capital').value) || 0)}`
+);
       lastPositiveAlertKey = key;
       lastPositiveAlertAt = now;
     }
@@ -490,6 +522,11 @@ function checkSoundAlerts(opportunities) {
 
     if (key !== lastNegativeAlertKey || now - lastNegativeAlertAt > 60000) {
       playTone('negative');
+      sendTelegramAlert(
+  `🔴 SPREAD NEGATIVO: ${worst.buyExchange} → ${worst.sellExchange}\n` +
+  `Par: ${worst.pair}\n` +
+  `Spread: ${worst.spread.toFixed(3)}%`
+);
       lastNegativeAlertKey = key;
       lastNegativeAlertAt = now;
     }
