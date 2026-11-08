@@ -1,6 +1,5 @@
-const QUOTER_V2 = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
 
-const USDT0 = '0xc2132D05D31c914a87C6611C10748AEb04B58e8F';
+const QUOTER_V2 = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
 
 const TOKENS = {
   'USDT/BRLA': {
@@ -8,7 +7,7 @@ const TOKENS = {
     inputAddress: '0xe6a537a407488807f0bbeb0038b79004f19dddfb',
     inputDecimals: 18,
     outputSymbol: 'USDT0',
-    outputAddress: USDT0,
+    outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
     outputDecimals: 6
   },
   'USDT/BRZ': {
@@ -16,7 +15,7 @@ const TOKENS = {
     inputAddress: '0x4eD141110F6EeeAbA9A1df36d8c26f684d2475Dc',
     inputDecimals: 18,
     outputSymbol: 'USDT0',
-    outputAddress: USDT0,
+    outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
     outputDecimals: 6
   }
 };
@@ -38,25 +37,33 @@ function addressWord(address) {
   return address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
 }
 
-// Converte uma quantia decimal para unidades inteiras sem perder precisão.
 function parseUnits(value, decimals) {
   const normalized = String(value).trim().replace(',', '.');
+
   if (!/^\d+(\.\d+)?$/.test(normalized)) {
-    throw new Error('Capital inválido.');
+    throw new Error('Quantidade inválida.');
   }
 
   const [whole, fraction = ''] = normalized.split('.');
+
   if (fraction.length > decimals) {
-    throw new Error('O capital tem casas decimais demais.');
+    throw new Error('Casas decimais excedem o limite do token.');
   }
 
   return BigInt(whole + fraction.padEnd(decimals, '0'));
 }
 
+function formatUnits(value, decimals) {
+  const raw = BigInt(value).toString().padStart(decimals + 1, '0');
+  const whole = raw.slice(0, -decimals);
+  const fraction = raw.slice(-decimals).replace(/0+$/, '');
+
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
 function encodeQuote(tokenIn, tokenOut, amountIn, fee) {
-  // Uniswap V3 QuoterV2:
-  // quoteExactInputSingle((address,address,uint256,uint24,uint160))
-  return '0x' + SELECTOR +
+  return '0x' +
+    SELECTOR +
     addressWord(tokenIn) +
     addressWord(tokenOut) +
     word(amountIn) +
@@ -72,125 +79,219 @@ async function rpcCall(rpc, data) {
       jsonrpc: '2.0',
       id: 1,
       method: 'eth_call',
-      params: [{ to: QUOTER_V2, data }, 'latest']
+      params: [
+        { to: QUOTER_V2, data },
+        'latest'
+      ]
     }),
-    signal: AbortSignal.timeout(9000)
+    signal: AbortSignal.timeout(10000)
   });
 
-  if (!response.ok) throw new Error('RPC HTTP ' + response.status);
+  if (!response.ok) {
+    throw new Error(`RPC HTTP ${response.status}`);
+  }
 
   const json = await response.json();
-  if (json.error) throw new Error(json.error.message || 'Falha RPC');
+
+  if (json.error) {
+    throw new Error(json.error.message || 'Erro na consulta RPC');
+  }
+
   if (!json.result || json.result === '0x') {
-    throw new Error('Pool sem cotação');
+    throw new Error('Contrato retornou resposta vazia.');
   }
 
   return json.result;
 }
 
 function decodeAmountOut(result, decimals) {
-  const hex = result.slice(2);
-  if (hex.length < 64) throw new Error('Resposta inválida do Quoter');
+  const hex = result.startsWith('0x') ? result.slice(2) : result;
+
+  if (hex.length < 64) {
+    throw new Error('Resposta ABI incompleta.');
+  }
 
   const raw = BigInt('0x' + hex.slice(0, 64));
-  return Number(raw) / (10 ** decimals);
+
+  return {
+    raw: raw.toString(),
+    formatted: formatUnits(raw, decimals)
+  };
 }
 
 async function quoteWithRpc(rpc, token, amountIn) {
   const attempts = await Promise.allSettled(
     FEE_TIERS.map(async fee => {
-      const data = encodeQuote(
+      const calldata = encodeQuote(
         token.inputAddress,
         token.outputAddress,
         amountIn,
         fee
       );
 
-      const result = await rpcCall(rpc, data);
+      const result = await rpcCall(rpc, calldata);
+      const decoded = decodeAmountOut(
+        result,
+        token.outputDecimals
+      );
 
       return {
         fee,
-        amountOut: decodeAmountOut(result, token.outputDecimals)
+        amountOut: decoded.formatted,
+        amountOutRaw: decoded.raw,
+        rawResponse: result,
+        calldata
       };
     })
   );
 
-  const valid = attempts
-    .filter(item => item.status === 'fulfilled')
-    .map(item => item.value)
-    .filter(item =>
-      Number.isFinite(item.amountOut) && item.amountOut > 0
-    )
-    .sort((a, b) => b.amountOut - a.amountOut);
+  const diagnostics = attempts.map((item, index) => {
+    if (item.status === 'fulfilled') {
+      return {
+        status: 'OK',
+        ...item.value
+      };
+    }
+
+    return {
+      status: 'ERRO',
+      fee: FEE_TIERS[index],
+      error: String(
+        item.reason?.message || item.reason
+      ).slice(0, 250)
+    };
+  });
+
+  const valid = diagnostics
+    .filter(item => item.status === 'OK')
+    .filter(item => BigInt(item.amountOutRaw) > 0n)
+    .sort((a, b) => {
+      const x = BigInt(a.amountOutRaw);
+      const y = BigInt(b.amountOutRaw);
+
+      return x > y ? -1 : x < y ? 1 : 0;
+    });
 
   if (!valid.length) {
-    const failure = attempts.find(item => item.status === 'rejected');
-    throw new Error(
-      failure?.reason?.message || 'Nenhum pool com liquidez encontrado.'
-    );
+    throw new Error('Nenhum pool retornou cotação válida.');
   }
 
-  return valid[0];
+  return {
+    best: valid[0],
+    diagnostics
+  };
 }
 
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
+
   const pair = url.searchParams.get('pair') || 'USDT/BRLA';
   const token = TOKENS[pair];
 
   if (!token) {
     return Response.json(
-      { error: 'Par DEX não suportado. Use USDT/BRLA ou USDT/BRZ.' },
+      {
+        error: 'Par não suportado. Utilize USDT/BRLA ou USDT/BRZ.'
+      },
       { status: 400 }
     );
   }
 
+  // capital representa a quantidade de BRLA ou BRZ enviada.
   const capital = url.searchParams.get('capital') || '1000';
 
   let amountIn;
+
   try {
     amountIn = parseUnits(capital, token.inputDecimals);
-    if (amountIn <= 0n) throw new Error('Capital deve ser maior que zero.');
+
+    if (amountIn <= 0n) {
+      throw new Error('A quantidade precisa ser maior que zero.');
+    }
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 400 });
+    return Response.json(
+      { error: error.message },
+      { status: 400 }
+    );
   }
 
-  let lastError;
+  const failures = [];
 
   for (const rpc of RPCS) {
     try {
       const quote = await quoteWithRpc(rpc, token, amountIn);
 
-      return Response.json({
-        source: 'Uniswap v3 QuoterV2',
-        network: 'Polygon',
-        chainId: 137,
-        pair,
-        direction: token.inputSymbol + ' → ' + token.outputSymbol,
-        inputAmount: Number(capital.replace(',', '.')),
-        inputSymbol: token.inputSymbol,
-        outputAmount: quote.amountOut,
-        outputSymbol: token.outputSymbol,
-        feeTier: quote.fee,
-        capitalCurrency: 'BRL',
-        note: 'Cotação simulada em um pool da Uniswap v3. Não inclui gas, slippage adicional, custos de entrada ou saída e não garante execução.',
-        updatedAt: new Date().toISOString()
-      }, {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate'
+      return Response.json(
+        {
+          diagnosticMode: true,
+          source: 'Uniswap V3 QuoterV2',
+          network: 'Polygon',
+          chainId: 137,
+
+          rpcUsed: rpc,
+          pair,
+
+          direction: `${token.inputSymbol} → ${token.outputSymbol}`,
+
+          inputAmount: String(capital).replace(',', '.'),
+          inputAmountUnits: amountIn.toString(),
+          inputAmountHex: '0x' + word(amountIn),
+
+          inputSymbol: token.inputSymbol,
+          inputAddress: token.inputAddress,
+          inputDecimals: token.inputDecimals,
+
+          outputSymbol: token.outputSymbol,
+          outputAddress: token.outputAddress,
+          outputDecimals: token.outputDecimals,
+
+          bestQuote: {
+            feeTier: quote.best.fee,
+            outputAmount: quote.best.amountOut,
+            outputAmountRaw: quote.best.amountOutRaw,
+            rawResponse: quote.best.rawResponse,
+            calldata: quote.best.calldata
+          },
+
+          allFeeTiers: quote.diagnostics,
+
+          note: 'Modo de diagnóstico. Cotação simulada em pool Uniswap V3. Não executar operações com estes dados antes da validação.',
+          updatedAt: new Date().toISOString()
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+          }
         }
-      });
+      );
+
     } catch (error) {
-      lastError = error;
+      failures.push({
+        rpc,
+        error: String(error?.message || error).slice(0, 250)
+      });
     }
   }
 
-  return Response.json({
-    source: 'Uniswap v3 QuoterV2',
-    network: 'Polygon',
-    pair,
-    error: lastError?.message ||
-      'Não foi possível consultar os RPCs da Polygon.',
-    note: 'Nenhuma cotação foi confirmada. Não trate como oportunidade.'
-  }, { status: 503 });
+  return Response.json(
+    {
+      diagnosticMode: true,
+      source: 'Uniswap V3 QuoterV2',
+      network: 'Polygon',
+      pair,
+      inputAmount: String(capital),
+      inputAmountUnits: amountIn.toString(),
+      error: 'Nenhum RPC conseguiu confirmar uma cotação.',
+      rpcFailures: failures,
+      note: 'Nenhuma cotação confirmada. Não utilizar para arbitragem.',
+      updatedAt: new Date().toISOString()
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+      }
+    }
+  );
 }
