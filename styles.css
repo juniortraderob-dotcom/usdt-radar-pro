@@ -1,30 +1,73 @@
-*{box-sizing:border-box}body{margin:0;background:#0b1119;color:#edf4f8;font:14px system-ui,Arial;display:flex}aside{width:225px;background:#101a25;padding:24px;min-height:100vh;flex-shrink:0}aside h2{font-size:16px;color:#38d996}nav{display:grid;gap:14px;margin-top:40px}a{color:#b9c7d5;text-decoration:none}main{padding:25px;max-width:1500px;width:100%;margin:auto}header,.section-title{display:flex;align-items:center;gap:15px;justify-content:space-between}h1{margin:0;font-size:24px}header p,.panel p,small{color:#91a2b4}.hero{margin:22px 0;background:linear-gradient(110deg,#15372f,#172a3b);border:1px solid #285447;border-radius:14px;padding:25px;display:flex;justify-content:space-between;align-items:center;gap:20px}.hero h2{font-size:42px;margin:8px 0}.positive{color:#31df91!important}.negative{color:#ff6572!important}.neutral{color:#aab7c5}.stats,.columns{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:15px 0}.stats article,.panel{background:#121d29;border:1px solid #273646;border-radius:12px;padding:17px}.stats b{display:block;font-size:23px;margin-top:10px}.panel{margin:15px 0}.columns{grid-template-columns:1.2fr .8fr}.exchanges{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source{background:#0d1721;padding:10px;border-radius:8px;color:#dbe6ef}.source span{float:right;color:#91a2b4;font-size:11px}input,select,button{background:#0d1721;color:#eef4f8;border:1px solid #304253;border-radius:7px;padding:10px}label input{display:block;margin-top:8px;width:150px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{text-align:left;padding:13px;border-bottom:1px solid #273646}th{color:#91a2b4;font-size:11px}.columns small,footer{color:#7e90a3}footer{padding:15px}@media(max-width:800px){body{display:block}aside{display:none;position:fixed;z-index:2;min-height:0;width:250px}aside.open{display:block}main{padding:14px}header h1{font-size:19px}header p{font-size:11px}.hero{align-items:flex-start;flex-direction:column}.stats{grid-template-columns:1fr 1fr}.stats article:last-child{grid-column:span 2}.columns{grid-template-columns:1fr}.exchanges{grid-template-columns:1fr 1fr}.section-title{flex-wrap:wrap}}/* Correção do menu lateral no celular */
+
+*{box-sizing:border-box}
+body{margin:0;background:#0b1119;color:#edf4f8;font:14px system-ui,Arial;display:flex}
+aside{width:225px;background:#101a25;padding:24px;min-height:100vh;flex-shrink:0}
+aside h2{font-size:16px;color:#38d996}
+nav{display:grid;gap:14px;margin-top:40px}
+nav a{color:#b9c7d5;text-decoration:none}
+nav a:hover{color:#38d996}
+main{padding:25px;max-width:1500px;width:100%;margin:auto;min-width:0}
+header,.section-title{display:flex;align-items:center;gap:15px;justify-content:space-between}
+h1{margin:0;font-size:24px}
+header p,.panel p,small{color:#91a2b4}
+button,select,input{background:#0d1721;color:#eef4f8;border:1px solid #304253;border-radius:7px;padding:10px}
+button{cursor:pointer}
+.hero{margin:22px 0;background:linear-gradient(110deg,#15372f,#172a3b);border:1px solid #285447;border-radius:14px;padding:25px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.hero h2{font-size:42px;margin:8px 0}
+.hero input{display:block;margin-top:8px;width:130px}
+.positive{color:#31df91!important}
+.negative{color:#ff6572!important}
+.neutral{color:#aab7c5}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:15px 0}
+.stats article,.panel{background:#121d29;border:1px solid #273646;border-radius:12px;padding:17px}
+.stats b{display:block;font-size:23px;margin-top:10px}
+.panel{margin:15px 0}
+.exchanges{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.source{background:#0d1721;padding:12px;border-radius:8px;color:#dbe6ef;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.source span{font-size:11px;color:#91a2b4}
+.source span.positive{color:#31df91}
+.source small{width:100%}
+.exchange-filters{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:20px 0}
+.exchange-filters label,.panel label{display:flex;flex-direction:column;gap:8px;font-weight:600}
+.exchange-filters select{width:100%}
+.opportunity-list{display:grid;gap:14px}
+.opportunity-card{background:#0d1721;border:1px solid #304253;border-radius:12px;padding:20px}
+.exchange-comparison{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:18px}
+.exchange-side{display:flex;flex-direction:column;gap:9px;min-width:0}
+.exchange-side strong{font-size:25px;font-weight:800;overflow-wrap:anywhere}
+.exchange-side small{font-size:11px;letter-spacing:1px;font-weight:700}
+.exchange-side span{font-size:15px;color:#dce7f0}
+.buy-side{text-align:left}
+.sell-side{text-align:right}
+.exchange-arrow{font-size:30px;color:#91a2b4;font-weight:bold}
+.opportunity-details{display:flex;flex-wrap:wrap;gap:12px 25px;border-top:1px solid #273646;margin-top:18px;padding-top:15px;color:#aebdcb;font-size:13px}
+.opportunity-details b{color:#edf4f8}
+.opportunity-details .positive{color:#31df91}
+.opportunity-details .negative{color:#ff6572}
+.check{display:flex!important;flex-direction:row!important;align-items:center}
+.check input{width:auto}
+#cost{width:180px}
+.empty-results{padding:20px;color:#aebdcb}
+footer{padding:15px;color:#7e90a3}
+.menu-backdrop[hidden]{display:none}
 @media(max-width:800px){
-  aside.open{
-    display:block;
-    position:fixed;
-    top:0;
-    left:0;
-    bottom:0;
-    width:250px;
-    height:100vh;
-    overflow-y:auto;
-    z-index:1001;
-  }
-
-  .menu-backdrop{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.65);
-    z-index:1000;
-  }
-}
-/* Corrige o espaçamento entre nome e status das corretoras */
-.source span:first-child {
-  float: none;
-  margin-right: 8px;
-}
-
-.source span:last-child {
-  float: right;
+ body{display:block}
+ aside{display:none;position:fixed;z-index:1001;top:0;left:0;bottom:0;width:250px;height:100vh;overflow-y:auto}
+ aside.open{display:block}
+ main{padding:14px}
+ header h1{font-size:19px}
+ header p{font-size:11px}
+ .hero{align-items:flex-start;flex-direction:column}
+ .stats{grid-template-columns:1fr 1fr}
+ .stats article:last-child{grid-column:span 2}
+ .exchanges{grid-template-columns:1fr 1fr}
+ .section-title{flex-wrap:wrap}
+ .exchange-filters{grid-template-columns:1fr}
+ .opportunity-card{padding:14px}
+ .exchange-comparison{gap:8px}
+ .exchange-side strong{font-size:19px}
+ .exchange-side span{font-size:12px}
+ .exchange-arrow{font-size:22px}
+ .opportunity-details{flex-direction:column;gap:9px}
+ .menu-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000}
 }
