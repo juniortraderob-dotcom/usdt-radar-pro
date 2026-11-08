@@ -1,3 +1,4 @@
+
 const $ = id => document.getElementById(id);
 
 const names = [
@@ -10,7 +11,7 @@ const tradeUrls = {
   OKX: 'https://www.okx.com/trade-spot/usdt-brl',
   Bybit: 'https://www.bybit.com/trade/spot/USDT/BRL',
   Bitget: 'https://www.bitget.com/spot/USDTBRL',
-  MEXC: 'https://www.mexc.com/exchange/USDT_BRL',
+  MEXC: 'https://www.mexc.com/exchange/BRL_USDT',
   KuCoin: 'https://www.kucoin.com/trade/USDT-BRL',
   Foxbit: 'https://foxbit.com.br/',
   Bitso: 'https://bitso.com/'
@@ -52,6 +53,7 @@ async function sendTelegramAlert(message) {
     return false;
   }
 }
+
 function money(value) {
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -249,42 +251,23 @@ function createMainCard(item, capital) {
   `;
 }
 
+/* OUTRAS OPORTUNIDADES */
+
 function ensureSecondarySection() {
-  let section = $('otherOpportunities');
-  if (section) return section;
-
-  section = document.createElement('section');
-  section.id = 'otherOpportunities';
-  section.className = 'panel';
-  section.style.marginTop = '35px';
-  section.style.opacity = '0.82';
-
-  section.innerHTML = `
-    <h2 style="font-size:17px;margin-bottom:6px">Outras oportunidades</h2>
-    <p style="font-size:12px">Demais combinações disponíveis, em formato compacto.</p>
-    <div id="otherOpportunityList"></div>
-  `;
-
-  const footer = document.querySelector('footer');
-  if (footer) {
-    footer.parentNode.insertBefore(section, footer);
-  } else {
-    document.querySelector('main').appendChild(section);
-  }
-
-  return section;
+  return $('otherOpportunities');
 }
 
 function renderOtherOpportunities(items, capital) {
   const section = ensureSecondarySection();
   const list = $('otherOpportunityList');
 
+  if (!section || !list) return;
+
   if (!items.length) {
-    section.style.display = 'none';
+    list.innerHTML =
+      '<p class="empty-results">Nenhuma outra oportunidade disponível neste momento.</p>';
     return;
   }
-
-  section.style.display = 'block';
 
   list.innerHTML = items.map(item => {
     const gross = capital * item.spread / 100;
@@ -477,6 +460,16 @@ function playTone(type) {
   });
 }
 
+function getAlertThreshold(item, configuredThreshold) {
+  const involvesMexc =
+    item.buyExchange.toUpperCase().includes('MEXC') ||
+    item.sellExchange.toUpperCase().includes('MEXC');
+
+  return involvesMexc
+    ? Math.max(Number(configuredThreshold) || 0, 1.30)
+    : Number(configuredThreshold) || 0;
+}
+
 function checkSoundAlerts(opportunities) {
   if (!$('positiveAlertEnabled') || !$('negativeAlertEnabled')) return;
 
@@ -488,44 +481,34 @@ function checkSoundAlerts(opportunities) {
   };
 
   const now = Date.now();
-  
-function getAlertThreshold(item, configuredThreshold) {
-  const involvesMexc =
-    item.buyExchange.toUpperCase().includes('MEXC') ||
-    item.sellExchange.toUpperCase().includes('MEXC');
 
-  return involvesMexc
-    ? Math.max(Number(configuredThreshold) || 0, 1.30)
-    : Number(configuredThreshold) || 0;
-}
+  const positives = opportunities
+    .filter(item =>
+      item.spread > 0 &&
+      item.spread >= getAlertThreshold(item, settings.positiveThreshold)
+    )
+    .sort((a, b) => b.spread - a.spread);
 
-const positives = opportunities
-  .filter(item =>
-    item.spread > 0 &&
-    item.spread >= getAlertThreshold(item, settings.positiveThreshold)
-  )
-  .sort((a, b) => b.spread - a.spread);
-
-const negatives = opportunities
-  .filter(item =>
-    item.spread < 0 &&
-    item.spread <= -getAlertThreshold(item, settings.negativeThreshold)
-  )
-  .sort((a, b) => a.spread - b.spread);
-
+  const negatives = opportunities
+    .filter(item =>
+      item.spread < 0 &&
+      item.spread <= -getAlertThreshold(item, settings.negativeThreshold)
+    )
+    .sort((a, b) => a.spread - b.spread);
 
   if (settings.positiveEnabled && positives.length) {
     const best = positives[0];
     const key = 'positive';
-    // Evita repetir o mesmo aviso a cada atualização de 10 segundos.
+
     if (key !== lastPositiveAlertKey) {
       playTone('positive');
       sendTelegramAlert(
-  `🟢 SPREAD POSITIVO: ${best.buyExchange} → ${best.sellExchange}\n` +
-  `Par: ${best.pair}\n` +
-  `Spread: +${best.spread.toFixed(3)}%\n` +
-  `Capital: ${money(Number($('capital').value) || 0)}`
-);
+        `🟢 SPREAD POSITIVO: ${best.buyExchange} → ${best.sellExchange}\n` +
+        `Par: ${best.pair}\n` +
+        `Spread: +${best.spread.toFixed(3)}%\n` +
+        `Capital: ${money(Number($('capital').value) || 0)}`
+      );
+
       lastPositiveAlertKey = key;
       lastPositiveAlertAt = now;
     }
@@ -540,10 +523,11 @@ const negatives = opportunities
     if (key !== lastNegativeAlertKey) {
       playTone('negative');
       sendTelegramAlert(
-  `🔴 SPREAD NEGATIVO: ${worst.buyExchange} → ${worst.sellExchange}\n` +
-  `Par: ${worst.pair}\n` +
-  `Spread: ${worst.spread.toFixed(3)}%`
-);
+        `🔴 SPREAD NEGATIVO: ${worst.buyExchange} → ${worst.sellExchange}\n` +
+        `Par: ${worst.pair}\n` +
+        `Spread: ${worst.spread.toFixed(3)}%`
+      );
+
       lastNegativeAlertKey = key;
       lastNegativeAlertAt = now;
     }
@@ -577,6 +561,7 @@ function renderOpportunities() {
       '<p class="empty-results">Nenhuma combinação disponível para os filtros selecionados.</p>';
 
     renderOtherOpportunities([], capital);
+
     $('best').textContent = '—';
     $('best').className = 'neutral';
     $('profit').textContent = 'Aguardando oportunidade';
@@ -703,6 +688,7 @@ $('menu').addEventListener('click', () => {
 });
 
 backdrop.addEventListener('click', closeMenu);
+
 sidebar.querySelectorAll('a').forEach(link => {
   link.addEventListener('click', closeMenu);
 });
