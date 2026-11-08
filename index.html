@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -13,6 +14,7 @@
       <a href="#overview">Visão geral</a>
       <a href="#opportunities">Oportunidades CEX</a>
       <a href="#dexOpportunities">Oportunidades DEX</a>
+      <a href="#otherOpportunities">Outras oportunidades</a>
       <a href="#cex">Corretoras CEX</a>
       <a href="#dex">Corretoras DEX</a>
       <a href="#settings">Custos</a>
@@ -22,24 +24,49 @@
   <main>
     <header>
       <button id="menu">☰</button>
-      <div>
+      <div class="header-title">
         <h1>USDT Radar Pro</h1>
         <p>Radar de arbitragem · atualização automática a cada 10 segundos</p>
       </div>
-      <button id="refresh">↻ Atualizar</button>
+      <div class="header-actions">
+        <span id="updated">—</span>
+        <button id="refresh">↻ Atualizar</button>
+      </div>
     </header>
 
-    <section class="hero" id="overview">
-      <div>
-        <small>MELHOR SPREAD BRUTO</small>
-        <h2 id="best" class="neutral">—</h2>
-        <b id="profit">Aguardando cotações reais</b>
-        <p id="route">Nenhuma oportunidade confirmada</p>
+    <!-- RESUMO DAS MELHORES OPORTUNIDADES -->
+    <section class="overview-grid" id="overview">
+
+      <!-- MELHOR CEX -->
+      <div class="hero cex-summary">
+        <div class="summary-content">
+          <small>MELHOR SPREAD BRUTO CEX</small>
+          <h2 id="best" class="neutral">—</h2>
+          <b id="profit">Aguardando cotações reais</b>
+          <p id="route">Nenhuma oportunidade confirmada</p>
+        </div>
+
+        <label>
+          Capital (R$)
+          <input id="capital" type="number" value="1000" min="0">
+        </label>
       </div>
-      <label>
-        Capital (R$)
-        <input id="capital" type="number" value="1000" min="0">
-      </label>
+
+      <!-- MELHOR DEX -->
+      <div class="hero dex-summary">
+        <div class="summary-content">
+          <small>MELHOR SPREAD BRUTO DEX</small>
+          <h2 id="dexBest" class="neutral">—</h2>
+          <b id="dexProfit">Aguardando integração DEX</b>
+          <p id="dexRoute">LlamaSwap · Polygon</p>
+        </div>
+
+        <div class="dex-summary-status">
+          <span class="network-dot"></span>
+          <span>Integração pendente</span>
+        </div>
+      </div>
+
     </section>
 
     <!-- OPORTUNIDADES CEX -->
@@ -161,11 +188,6 @@
         CEX respondendo
         <b id="online">0 / 8</b>
       </article>
-
-      <article>
-        Última atualização
-        <b id="updated">—</b>
-      </article>
     </section>
 
     <!-- CEX -->
@@ -211,6 +233,15 @@
     <section class="panel">
       <h2>Histórico de spreads</h2>
       <div id="history">Aguardando oportunidades reais.</div>
+    </section>
+
+    <!-- OUTRAS OPORTUNIDADES -->
+    <section class="panel other-opportunities" id="otherOpportunities">
+      <h2>Outras oportunidades</h2>
+      <p>Demais combinações disponíveis, em formato compacto.</p>
+      <div id="otherOpportunityList">
+        <p class="empty-results">Aguardando outras oportunidades.</p>
+      </div>
     </section>
 
     <footer>
