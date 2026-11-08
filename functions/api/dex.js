@@ -1,22 +1,22 @@
 
 const ZEROX_API_URL = 'https://api.0x.org/swap/allowance-holder/price';
 
+const USDT = {
+  symbol: 'USDT',
+  address: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
+  decimals: 6
+};
+
 const TOKENS = {
   'USDT/BRLA': {
-    inputSymbol: 'BRLA',
-    inputAddress: '0xe6a537a407488807f0bbeb0038b79004f19dddfb',
-    inputDecimals: 18,
-    outputSymbol: 'USDT',
-    outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
-    outputDecimals: 6
+    symbol: 'BRLA',
+    address: '0xe6a537a407488807f0bbeb0038b79004f19dddfb',
+    decimals: 18
   },
   'USDT/BRZ': {
-    inputSymbol: 'BRZ',
-    inputAddress: '0x4eD141110F6EeeAbA9A1df36d8c26f684d2475Dc',
-    inputDecimals: 18,
-    outputSymbol: 'USDT',
-    outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
-    outputDecimals: 6
+    symbol: 'BRZ',
+    address: '0x4eD141110F6EeeAbA9A1df36d8c26f684d2475Dc',
+    decimals: 18
   }
 };
 
@@ -44,7 +44,7 @@ function formatUnits(value, decimals) {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-async function getZeroXPrice(context, token, amountIn) {
+async function getZeroXPrice(context, sellToken, buyToken, amountIn) {
   const apiKey = context.env.ZEROX_API_KEY;
 
   if (!apiKey) {
@@ -53,8 +53,8 @@ async function getZeroXPrice(context, token, amountIn) {
 
   const params = new URLSearchParams({
     chainId: '137',
-    sellToken: token.inputAddress,
-    buyToken: token.outputAddress,
+    sellToken: sellToken.address,
+    buyToken: buyToken.address,
     sellAmount: amountIn.toString()
   });
 
@@ -84,7 +84,7 @@ async function getZeroXPrice(context, token, amountIn) {
   }
 
   if (!data.buyAmount) {
-    throw new Error('A 0x não retornou uma quantidade de saída.');
+    throw new Error('A 0x não retornou quantidade de saída.');
   }
 
   if (data.liquidityAvailable === false) {
@@ -98,14 +98,36 @@ async function getZeroXPrice(context, token, amountIn) {
   }
 
   return {
-    amountOut: formatUnits(outputRaw, token.outputDecimals),
-    amountOutRaw: outputRaw.toString(),
+    status: 'OK',
+    sellAmount: formatUnits(amountIn, sellToken.decimals),
+    buyAmount: formatUnits(outputRaw, buyToken.decimals),
+    sellAmountRaw: amountIn.toString(),
+    buyAmountRaw: outputRaw.toString(),
+    sellSymbol: sellToken.symbol,
+    buySymbol: buyToken.symbol,
     price: data.price ?? null,
     estimatedPriceImpact: data.estimatedPriceImpact ?? null,
     liquidityAvailable: data.liquidityAvailable ?? null,
-    route: data.route ?? null,
-    rawResponse: data
+    route: data.route ?? null
   };
+}
+
+async function safeQuote(context, sellToken, buyToken, amountIn) {
+  try {
+    return await getZeroXPrice(
+      context,
+      sellToken,
+      buyToken,
+      amountIn
+    );
+  } catch (error) {
+    return {
+      status: 'ERRO',
+      sellSymbol: sellToken.symbol,
+      buySymbol: buyToken.symbol,
+      error: String(error?.message || error).slice(0, 400)
+    };
+  }
 }
 
 export async function onRequestGet(context) {
@@ -122,14 +144,18 @@ export async function onRequestGet(context) {
   }
 
   const capital = url.searchParams.get('capital') || '1000';
+  const reverseCapital =
+    url.searchParams.get('reverseCapital') || '1000';
 
-  let amountIn;
+  let tokenAmount;
+  let usdtAmount;
 
   try {
-    amountIn = parseUnits(capital, token.inputDecimals);
+    tokenAmount = parseUnits(capital, token.decimals);
+    usdtAmount = parseUnits(reverseCapital, USDT.decimals);
 
-    if (amountIn <= 0n) {
-      throw new Error('Quantidade deve ser maior que zero.');
+    if (tokenAmount <= 0n || usdtAmount <= 0n) {
+      throw new Error('As quantidades devem ser maiores que zero.');
     }
   } catch (error) {
     return Response.json(
@@ -138,88 +164,50 @@ export async function onRequestGet(context) {
     );
   }
 
-  try {
-    const quote = await getZeroXPrice(context, token, amountIn);
+  const [tokenToUsdt, usdtToToken] = await Promise.all([
+    safeQuote(context, token, USDT, tokenAmount),
+    safeQuote(context, USDT, token, usdtAmount)
+  ]);
 
-    const result = {
-      rpc: '0x Swap API',
-      status: 'OK',
-      bestQuote: {
-        feeTier: null,
-        outputAmount: quote.amountOut,
-        outputAmountRaw: quote.amountOutRaw,
-        price: quote.price,
-        estimatedPriceImpact: quote.estimatedPriceImpact,
-        liquidityAvailable: quote.liquidityAvailable,
-        rawResponse: quote.rawResponse
+  const successfulQuotes = [tokenToUsdt, usdtToToken]
+    .filter(quote => quote.status === 'OK');
+
+  return Response.json(
+    {
+      diagnosticMode: true,
+      source: '0x Swap API v2',
+      network: 'Polygon',
+      chainId: 137,
+      pair,
+
+      inputs: {
+        tokenAmount: String(capital).replace(',', '.'),
+        usdtAmount: String(reverseCapital).replace(',', '.')
       },
-      allFeeTiers: []
-    };
 
-    return Response.json(
-      {
-        diagnosticMode: true,
-        source: '0x Swap API v2',
-        network: 'Polygon',
-        chainId: 137,
-        pair,
-        direction: `${token.inputSymbol} → ${token.outputSymbol}`,
-
-        inputAmount: String(capital).replace(',', '.'),
-        inputAmountUnits: amountIn.toString(),
-
-        inputSymbol: token.inputSymbol,
-        inputAddress: token.inputAddress,
-        inputDecimals: token.inputDecimals,
-
-        outputSymbol: token.outputSymbol,
-        outputAddress: token.outputAddress,
-        outputDecimals: token.outputDecimals,
-
-        status: 'OK',
-        bestQuote: result.bestQuote,
-        rpcResults: [result],
-
-        note: 'Preço indicativo consultado pela 0x. Não executa swap. Validar liquidez, impacto e custos antes de qualquer operação.',
-        updatedAt: new Date().toISOString()
+      directions: {
+        tokenToUsdt,
+        usdtToToken
       },
-      {
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
-        }
+
+      status:
+        successfulQuotes.length === 2
+          ? 'OK'
+          : successfulQuotes.length === 1
+            ? 'PARCIAL'
+            : 'ERRO',
+
+      successfulQuotes: successfulQuotes.length,
+
+      note: 'Cotações indicativas da 0x. Não executam swaps. Valores das duas direções usam quantidades de entrada independentes. Verifique liquidez, impacto, taxas e custos antes de qualquer operação.',
+
+      updatedAt: new Date().toISOString()
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
       }
-    );
-
-  } catch (error) {
-    return Response.json(
-      {
-        diagnosticMode: true,
-        source: '0x Swap API v2',
-        network: 'Polygon',
-        chainId: 137,
-        pair,
-        direction: `${token.inputSymbol} → ${token.outputSymbol}`,
-        inputAmount: String(capital).replace(',', '.'),
-        inputAmountUnits: amountIn.toString(),
-        inputSymbol: token.inputSymbol,
-        outputSymbol: token.outputSymbol,
-        status: 'ERRO',
-        error: String(error?.message || error).slice(0, 500),
-        rpcResults: [{
-          rpc: '0x Swap API',
-          status: 'ERRO',
-          error: String(error?.message || error).slice(0, 500)
-        }],
-        updatedAt: new Date().toISOString()
-      },
-      {
-        status: 502,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
-        }
-      }
-    );
-  }
+    }
+  );
 }
