@@ -501,7 +501,7 @@ function checkSoundAlerts(opportunities) {
     const key = `${best.buyExchange}|${best.sellExchange}|${best.pair}|${best.spread.toFixed(3)}`;
 
     // Evita repetir o mesmo aviso a cada atualização de 10 segundos.
-    if (key !== lastPositiveAlertKey || now - lastPositiveAlertAt > 60000) {
+    if (key !== lastPositiveAlertKey) {
       playTone('positive');
       sendTelegramAlert(
   `🟢 SPREAD POSITIVO: ${best.buyExchange} → ${best.sellExchange}\n` +
@@ -520,7 +520,7 @@ function checkSoundAlerts(opportunities) {
     const worst = negatives[0];
     const key = `${worst.buyExchange}|${worst.sellExchange}|${worst.pair}|${worst.spread.toFixed(3)}`;
 
-    if (key !== lastNegativeAlertKey || now - lastNegativeAlertAt > 60000) {
+    if (key !== lastNegativeAlertKey) {
       playTone('negative');
       sendTelegramAlert(
   `🔴 SPREAD NEGATIVO: ${worst.buyExchange} → ${worst.sellExchange}\n` +
