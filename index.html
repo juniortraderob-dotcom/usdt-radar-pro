@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -10,11 +11,11 @@
 <body>
   <aside id="sidebar">
     <h2>🟢 USDT RADAR PRO</h2>
-
     <nav>
       <a href="#overview">Visão geral</a>
       <a href="#opportunities">Oportunidades</a>
-      <a href="#sources">Corretoras</a>
+      <a href="#cex">Corretoras CEX</a>
+      <a href="#dex">Corretoras DEX</a>
       <a href="#settings">Custos</a>
     </nav>
   </aside>
@@ -22,12 +23,10 @@
   <main>
     <header>
       <button id="menu" type="button">☰</button>
-
       <div>
         <h1>USDT Radar Pro</h1>
         <p>Radar de arbitragem · atualização automática a cada 10 segundos</p>
       </div>
-
       <button id="refresh" type="button">↻ Atualizar</button>
     </header>
 
@@ -38,7 +37,6 @@
         <b id="profit">Aguardando cotações reais</b>
         <p id="route">Nenhuma oportunidade confirmada</p>
       </div>
-
       <label>
         Capital (R$)
         <input id="capital" type="number" value="1000" min="1">
@@ -50,12 +48,10 @@
         Oportunidades positivas
         <b id="count">0</b>
       </article>
-
       <article>
-        Corretoras respondendo
+        CEX respondendo
         <b id="online">0 / 8</b>
       </article>
-
       <article>
         Última atualização
         <b id="updated">—</b>
@@ -65,14 +61,12 @@
     <section class="panel" id="opportunities">
       <div class="section-title">
         <h2>Oportunidades</h2>
-
         <select id="pair">
           <option>USDT/BRL</option>
           <option>USDT/BRLA</option>
           <option>USDT/BRL1</option>
           <option>USDT/BRZ</option>
         </select>
-
         <select id="min">
           <option value="0">Spread acima de 0%</option>
           <option value=".1">Acima de 0,10%</option>
@@ -94,54 +88,68 @@
               <th>Lucro bruto</th>
             </tr>
           </thead>
-
           <tbody id="rows">
             <tr>
-              <td colspan="7">
-                Aguardando cotações reais. Nenhum preço fictício será mostrado.
-              </td>
+              <td colspan="7">Aguardando cotações reais.</td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <div class="columns">
-      <section class="panel" id="sources">
-        <h2>Corretoras centralizadas (CEX)</h2>
-        <p>8 corretoras · integrações em andamento</p>
-        <div id="exchanges" class="exchanges"></div>
-      </section>
+    <!-- CORRETORAS CENTRALIZADAS -->
+    <section class="panel" id="cex">
+      <h2>Corretoras centralizadas (CEX)</h2>
+      <p>Exchanges centralizadas · cotações e integrações</p>
+      <div id="exchanges" class="exchanges"></div>
+    </section>
 
-      <section class="panel" id="settings">
-        <h2>Configuração das taxas</h2>
+    <!-- CORRETORAS DESCENTRALIZADAS -->
+    <section class="panel" id="dex">
+      <h2>Corretoras descentralizadas (DEX)</h2>
+      <p>Agregadores e exchanges descentralizadas · integrações em preparação</p>
 
-        <label>
-          <input id="includeCosts" type="checkbox">
-          Considerar taxas e custos no cálculo
-        </label>
+      <div id="dexExchanges" class="exchanges">
+        <div class="source">
+          <strong>LlamaSwap</strong>
+          <span class="neutral">Integração pendente</span>
+          <small>Liquidez descentralizada</small>
+        </div>
 
-        <p>Deixe desmarcado para visualizar somente o lucro bruto.</p>
+        <div class="source">
+          <strong>Uniswap</strong>
+          <span class="neutral">Integração pendente</span>
+          <small>DEX · múltiplas redes</small>
+        </div>
 
-        <label>
-          Custo total da operação (R$)
-          <input
-            id="cost"
-            type="number"
-            min="0"
-            step="0.01"
-            value="0"
-            disabled
-          >
-        </label>
+        <div class="source">
+          <strong>Oku Trade</strong>
+          <span class="neutral">Integração pendente</span>
+          <small>Agregador de liquidez</small>
+        </div>
+      </div>
+    </section>
 
-        <p>Lucro líquido estimado: <b id="net">Desativado</b></p>
+    <!-- CUSTOS -->
+    <section class="panel" id="settings">
+      <h2>Configuração das taxas</h2>
 
-        <small>
-          O lucro bruto continuará sendo exibido independentemente dessa opção.
-        </small>
-      </section>
-    </div>
+      <label>
+        <input id="includeCosts" type="checkbox">
+        Considerar taxas e custos no cálculo
+      </label>
+
+      <p>Deixe desmarcado para visualizar somente o lucro bruto.</p>
+
+      <label>
+        Custo total da operação (R$)
+        <input id="cost" type="number" min="0" step="0.01"
+          value="0" disabled>
+      </label>
+
+      <p>Lucro líquido estimado: <b id="net">Desativado</b></p>
+      <small>O lucro bruto continuará sendo exibido independentemente dessa opção.</small>
+    </section>
 
     <section class="panel">
       <h2>Histórico de spreads</h2>
@@ -151,7 +159,7 @@
     </section>
 
     <footer>
-      Ferramenta informativa. Confira taxas, liquidez, rede, limites e custos antes de operar.
+      Ferramenta informativa. Confira taxas, liquidez, redes, limites e custos antes de operar.
     </footer>
   </main>
 
