@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -12,7 +11,8 @@
     <h2>🟢 USDT RADAR PRO</h2>
     <nav>
       <a href="#overview">Visão geral</a>
-      <a href="#opportunities">Oportunidades</a>
+      <a href="#opportunities">Oportunidades CEX</a>
+      <a href="#dexOpportunities">Oportunidades DEX</a>
       <a href="#cex">Corretoras CEX</a>
       <a href="#dex">Corretoras DEX</a>
       <a href="#settings">Custos</a>
@@ -24,7 +24,7 @@
       <button id="menu">☰</button>
       <div>
         <h1>USDT Radar Pro</h1>
-        <p>Radar de arbitragem · atualização a cada 10 segundos</p>
+        <p>Radar de arbitragem · atualização automática a cada 10 segundos</p>
       </div>
       <button id="refresh">↻ Atualizar</button>
     </header>
@@ -42,10 +42,10 @@
       </label>
     </section>
 
-    <!-- OPORTUNIDADES AGORA VÊM LOGO ABAIXO DO SPREAD -->
+    <!-- OPORTUNIDADES CEX -->
     <section class="panel" id="opportunities">
       <div class="section-title">
-        <h2>Oportunidades</h2>
+        <h2>Oportunidades CEX</h2>
         <select id="pair">
           <option>USDT/BRL</option>
           <option>USDT/BRLA</option>
@@ -78,7 +78,94 @@
       </div>
     </section>
 
-    <!-- INDICADORES AGORA FICAM ABAIXO DAS OPORTUNIDADES -->
+    <!-- NOVA ÁREA DE OPORTUNIDADES DEX -->
+    <section class="panel dex-opportunities" id="dexOpportunities">
+
+      <div class="section-title">
+        <div>
+          <h2>Oportunidades DEX</h2>
+          <p>Comparação entre exchanges descentralizadas e centralizadas</p>
+        </div>
+
+        <select id="dexPair">
+          <option value="USDT/BRLA">USDT/BRLA</option>
+          <option value="USDT/BRZ">USDT/BRZ</option>
+        </select>
+      </div>
+
+      <div class="dex-network">
+        <span class="network-dot"></span>
+        Rede monitorada: <strong>Polygon</strong>
+      </div>
+
+      <div class="exchange-filters">
+        <label>Comprar em
+          <select id="dexBuyFilter">
+            <option value="all">Todas as plataformas</option>
+
+            <optgroup label="CEX — Centralizadas">
+              <option value="Binance">Binance</option>
+              <option value="OKX">OKX</option>
+              <option value="Bybit">Bybit</option>
+              <option value="Bitget">Bitget</option>
+              <option value="MEXC">MEXC</option>
+              <option value="KuCoin">KuCoin</option>
+              <option value="Foxbit">Foxbit</option>
+            </optgroup>
+
+            <optgroup label="DEX — Descentralizadas">
+              <option value="LlamaSwap">LlamaSwap</option>
+              <option value="Uniswap">Uniswap</option>
+              <option value="Oku Trade">Oku Trade</option>
+            </optgroup>
+          </select>
+        </label>
+
+        <label>Vender em
+          <select id="dexSellFilter">
+            <option value="all">Todas as plataformas</option>
+
+            <optgroup label="CEX — Centralizadas">
+              <option value="Binance">Binance</option>
+              <option value="OKX">OKX</option>
+              <option value="Bybit">Bybit</option>
+              <option value="Bitget">Bitget</option>
+              <option value="MEXC">MEXC</option>
+              <option value="KuCoin">KuCoin</option>
+              <option value="Foxbit">Foxbit</option>
+            </optgroup>
+
+            <optgroup label="DEX — Descentralizadas">
+              <option value="LlamaSwap">LlamaSwap</option>
+              <option value="Uniswap">Uniswap</option>
+              <option value="Oku Trade">Oku Trade</option>
+            </optgroup>
+          </select>
+        </label>
+      </div>
+
+      <div class="dex-placeholder">
+        <div class="dex-placeholder-icon">⇄</div>
+        <h3>Comparação de oportunidades DEX</h3>
+        <p>
+          Selecione as plataformas de compra e venda para comparar
+          oportunidades entre CEX e DEX.
+        </p>
+
+        <div class="dex-pair-preview">
+          <span>USDT/BRLA</span>
+          <span>USDT/BRZ</span>
+          <span>Polygon</span>
+        </div>
+
+        <small>
+          Área visual preparada. Integrações e cotações serão adicionadas
+          na próxima etapa.
+        </small>
+      </div>
+    </section>
+
+    <!-- INDICADORES -->
     <section class="stats">
       <article>
         Oportunidades positivas
@@ -96,27 +183,29 @@
       </article>
     </section>
 
+    <!-- CEX -->
     <section class="panel" id="cex">
       <h2>Corretoras centralizadas (CEX)</h2>
       <p>Exchanges centralizadas · cotações e integrações</p>
       <div id="exchanges" class="exchanges"></div>
     </section>
 
+    <!-- DEX -->
     <section class="panel" id="dex">
       <h2>Corretoras descentralizadas (DEX)</h2>
-      <p>Agregadores e exchanges descentralizadas · integrações em preparação</p>
+      <p>Agregadores e exchanges descentralizadas · rede Polygon</p>
 
       <div id="dexExchanges" class="exchanges">
         <div class="source">
           <strong>LlamaSwap</strong>
           <span>Integração pendente</span>
-          <small>Liquidez descentralizada</small>
+          <small>Agregador de liquidez</small>
         </div>
 
         <div class="source">
           <strong>Uniswap</strong>
           <span>Integração pendente</span>
-          <small>DEX · múltiplas redes</small>
+          <small>DEX · Polygon</small>
         </div>
 
         <div class="source">
@@ -127,6 +216,7 @@
       </div>
     </section>
 
+    <!-- CUSTOS -->
     <section class="panel" id="settings">
       <h2>Configuração das taxas</h2>
 
