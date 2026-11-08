@@ -8,7 +8,13 @@ const names = [
 
 const tradeUrls = {
   Binance: 'https://www.binance.com/pt-BR/trade/USDT_BRL?type=spot',
-  MEXC: 'https://www.mexc.com/pt-BR/exchange/BRL_USDT'
+  OKX: 'https://www.okx.com/trade-spot/usdt-brl',
+  Bybit: 'https://www.bybit.com/trade/spot/USDT/BRL',
+  Bitget: 'https://www.bitget.com/spot/USDTBRL',
+  MEXC: 'https://www.mexc.com/exchange/USDT_BRL',
+  KuCoin: 'https://www.kucoin.com/trade/USDT-BRL',
+  Foxbit: 'https://foxbit.com.br/',
+  Bitso: 'https://bitso.com/'
 };
 
 let latestOpportunities = [];
@@ -37,7 +43,6 @@ function setupFilters() {
     });
   });
 
-  // O radar não terá filtro separado de positivos e negativos.
   if ($('resultFilter')) {
     $('resultFilter').style.display = 'none';
   }
@@ -73,41 +78,49 @@ function validLevel(level) {
     Number(level[1]) > 0;
 }
 
+// Consulta direta da Binance como alternativa
+// caso a consulta pelo servidor esteja bloqueada.
 async function getBinanceQuote() {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 9000);
+  const hosts = [
+    'https://data-api.binance.vision',
+    'https://api1.binance.com',
+    'https://api.binance.com'
+  ];
 
-  try {
-    const url =
-      'https://data-api.binance.vision/api/v3/depth?symbol=USDTBRL&limit=5';
+  let lastError;
 
-    const response = await fetch(url, {
-      cache: 'no-store',
-      signal: controller.signal
-    });
+  for (const host of hosts) {
+    try {
+      const response = await fetch(
+        `${host}/api/v3/depth?symbol=USDTBRL&limit=5`,
+        { cache: 'no-store' }
+      );
 
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+
+      const book = await response.json();
+
+      if (!validLevel(book.bids?.[0]) ||
+          !validLevel(book.asks?.[0])) {
+        throw new Error('Livro Binance sem ofertas válidas');
+      }
+
+      return {
+        exchange: 'Binance',
+        pair: 'USDT/BRL',
+        bid: Number(book.bids[0][0]),
+        bidQuantity: Number(book.bids[0][1]),
+        ask: Number(book.asks[0][0]),
+        askQuantity: Number(book.asks[0][1])
+      };
+    } catch (error) {
+      lastError = error;
     }
-
-    const book = await response.json();
-
-    if (!validLevel(book.bids?.[0]) ||
-        !validLevel(book.asks?.[0])) {
-      throw new Error('Livro Binance sem ofertas válidas');
-    }
-
-    return {
-      exchange: 'Binance',
-      pair: 'USDT/BRL',
-      bid: Number(book.bids[0][0]),
-      bidQuantity: Number(book.bids[0][1]),
-      ask: Number(book.asks[0][0]),
-      askQuantity: Number(book.asks[0][1])
-    };
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw lastError || new Error('Binance indisponível');
 }
 
 function calculateOpportunities(quotes) {
@@ -156,6 +169,152 @@ function exchangeButton(name) {
   `;
 }
 
+function createMainCard(item, capital) {
+  const gross = capital * item.spread / 100;
+  const cls = item.spread > 0 ? 'positive' : 'negative';
+
+  return `
+    <article class="opportunity-card">
+
+      <div class="exchange-comparison">
+
+        <div class="exchange-side buy-side">
+          <small>COMPRAR USDT</small>
+          <strong>${safe(item.buyExchange)}</strong>
+          <span>ASK: ${money(item.ask)}</span>
+        </div>
+
+        <div class="exchange-arrow">→</div>
+
+        <div class="exchange-side sell-side">
+          <small>VENDER USDT</small>
+          <strong>${safe(item.sellExchange)}</strong>
+          <span>BID: ${money(item.bid)}</span>
+        </div>
+
+      </div>
+
+      <div class="opportunity-details">
+        <span>Par: <b>${safe(item.pair)}</b></span>
+
+        <span>Spread:
+          <b class="${cls}">
+            ${item.spread > 0 ? '+' : ''}${item.spread.toFixed(3)}%
+          </b>
+        </span>
+
+        <span>Lucro/prejuízo bruto:
+          <b class="${cls}">${money(gross)}</b>
+        </span>
+
+        <span>Quantidade disponível no primeiro nível:
+          <b>${item.quantity.toFixed(4)} USDT</b>
+        </span>
+      </div>
+
+      <div class="exchange-buttons">
+        ${exchangeButton(item.buyExchange)}
+        ${exchangeButton(item.sellExchange)}
+      </div>
+
+    </article>
+  `;
+}
+
+function ensureSecondarySection() {
+  let section = $('otherOpportunities');
+
+  if (section) return section;
+
+  section = document.createElement('section');
+  section.id = 'otherOpportunities';
+  section.className = 'panel';
+
+  section.style.marginTop = '35px';
+  section.style.opacity = '0.82';
+
+  section.innerHTML = `
+    <h2 style="font-size:17px;margin-bottom:6px">
+      Outras oportunidades
+    </h2>
+    <p style="font-size:12px">
+      Demais combinações disponíveis, em formato compacto.
+    </p>
+    <div id="otherOpportunityList"></div>
+  `;
+
+  const footer = document.querySelector('footer');
+
+  if (footer) {
+    footer.parentNode.insertBefore(section, footer);
+  } else {
+    document.querySelector('main').appendChild(section);
+  }
+
+  return section;
+}
+
+function renderOtherOpportunities(items, capital) {
+  const section = ensureSecondarySection();
+  const list = $('otherOpportunityList');
+
+  if (!items.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+
+  list.innerHTML = items.map(item => {
+    const gross = capital * item.spread / 100;
+    const cls = item.spread > 0 ? 'positive' : 'negative';
+
+    return `
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        flex-wrap:wrap;
+        gap:10px;
+        padding:12px 4px;
+        border-top:1px solid #273646;
+        font-size:12px;
+        color:#aebdcb;
+      ">
+        <span>
+          <b style="color:#edf4f8">
+            ${safe(item.buyExchange)}
+          </b>
+          →
+          <b style="color:#edf4f8">
+            ${safe(item.sellExchange)}
+          </b>
+        </span>
+
+        <span>${safe(item.pair)}</span>
+
+        <span class="${cls}" style="font-weight:700">
+          ${item.spread > 0 ? '+' : ''}${item.spread.toFixed(3)}%
+        </span>
+
+        <span class="${cls}">
+          ${money(gross)}
+        </span>
+
+        <span style="display:flex;gap:7px;flex-wrap:wrap">
+          ${exchangeButton(item.buyExchange)}
+          ${exchangeButton(item.sellExchange)}
+        </span>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.exchange-link').forEach(link => {
+    link.style.padding = '6px 9px';
+    link.style.fontSize = '11px';
+  });
+}
+
 function renderOpportunities() {
   const capital = Math.max(
     0,
@@ -165,21 +324,18 @@ function renderOpportunities() {
   const buy = $('buyFilter').value;
   const sell = $('sellFilter').value;
 
-  // Primeiro aplica os filtros escolhidos pelo usuário.
   const selected = latestOpportunities.filter(item => {
     if (buy !== 'all' && item.buyExchange !== buy) return false;
     if (sell !== 'all' && item.sellExchange !== sell) return false;
     return true;
   });
 
-  // Prioriza oportunidades positivas.
-  // Só mostra negativas quando não existe nenhuma positiva.
+  // Se houver oportunidades positivas, mostra somente elas.
+  // Se não houver nenhuma positiva, mostra as negativas.
   const positives = selected.filter(item => item.spread > 0);
   const negatives = selected.filter(item => item.spread < 0);
 
-  const filtered = positives.length
-    ? positives
-    : negatives;
+  const filtered = positives.length ? positives : negatives;
 
   $('count').textContent =
     latestOpportunities.filter(x => x.spread > 0).length;
@@ -187,6 +343,8 @@ function renderOpportunities() {
   if (!filtered.length) {
     $('rows').innerHTML =
       '<p class="empty-results">Nenhuma combinação disponível para os filtros selecionados.</p>';
+
+    renderOtherOpportunities([], capital);
 
     $('best').textContent = '—';
     $('best').className = 'neutral';
@@ -198,67 +356,17 @@ function renderOpportunities() {
     return;
   }
 
-  $('rows').innerHTML = filtered.map(item => {
-    const gross = capital * item.spread / 100;
-
-    const cls = item.spread > 0
-      ? 'positive'
-      : 'negative';
-
-    return `
-      <article class="opportunity-card">
-
-        <div class="exchange-comparison">
-
-          <div class="exchange-side buy-side">
-            <small>COMPRAR USDT</small>
-            <strong>${safe(item.buyExchange)}</strong>
-            <span>ASK: ${money(item.ask)}</span>
-          </div>
-
-          <div class="exchange-arrow">→</div>
-
-          <div class="exchange-side sell-side">
-            <small>VENDER USDT</small>
-            <strong>${safe(item.sellExchange)}</strong>
-            <span>BID: ${money(item.bid)}</span>
-          </div>
-
-        </div>
-
-        <div class="opportunity-details">
-          <span>Par: <b>${safe(item.pair)}</b></span>
-
-          <span>Spread:
-            <b class="${cls}">
-              ${item.spread > 0 ? '+' : ''}${item.spread.toFixed(3)}%
-            </b>
-          </span>
-
-          <span>Lucro/prejuízo bruto:
-            <b class="${cls}">${money(gross)}</b>
-          </span>
-
-          <span>Quantidade disponível no primeiro nível:
-            <b>${item.quantity.toFixed(4)} USDT</b>
-          </span>
-        </div>
-
-        <div class="exchange-buttons">
-          ${exchangeButton(item.buyExchange)}
-          ${exchangeButton(item.sellExchange)}
-        </div>
-
-      </article>
-    `;
-  }).join('');
-
+  // A melhor oportunidade fica sozinha em destaque.
   const best = filtered[0];
-  const gross = capital * best.spread / 100;
+  const others = filtered.slice(1);
 
-  const cls = best.spread > 0
-    ? 'positive'
-    : 'negative';
+  $('rows').innerHTML = createMainCard(best, capital);
+
+  // As demais ficam discretas no final da página.
+  renderOtherOpportunities(others, capital);
+
+  const gross = capital * best.spread / 100;
+  const cls = best.spread > 0 ? 'positive' : 'negative';
 
   $('best').textContent =
     (best.spread > 0 ? '+' : '') +
@@ -312,7 +420,8 @@ async function refresh() {
     const statuses = data.statuses || {};
     const quotes = [...(data.quotes || [])];
 
-    // Consulta direta da Binance para USDT/BRL.
+    // Binance: tenta consulta alternativa sem apagar
+    // uma cotação válida que já veio do servidor.
     if (pair === 'USDT/BRL') {
       try {
         const binance = await getBinanceQuote();
@@ -330,9 +439,13 @@ async function refresh() {
         statuses.Binance = 'Online';
 
       } catch (error) {
-        statuses.Binance = 'Erro: ' +
-          String(error.message || 'Falha na consulta')
-            .slice(0, 70);
+        const hasBinanceQuote = quotes.some(
+          q => q.exchange === 'Binance'
+        );
+
+        if (hasBinanceQuote) {
+          statuses.Binance = 'Online';
+        }
       }
     } else {
       statuses.Binance = 'Par ainda não integrado';
@@ -346,8 +459,7 @@ async function refresh() {
     $('online').textContent =
       onlineCount + ' / ' + names.length;
 
-    latestOpportunities =
-      calculateOpportunities(quotes);
+    latestOpportunities = calculateOpportunities(quotes);
 
     renderOpportunities();
 
