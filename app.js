@@ -488,13 +488,31 @@ function checkSoundAlerts(opportunities) {
   };
 
   const now = Date.now();
-  const positives = opportunities
-    .filter(item => item.spread >= settings.positiveThreshold && item.spread > 0)
-    .sort((a, b) => b.spread - a.spread);
+  
+function getAlertThreshold(item, configuredThreshold) {
+  const involvesMexc =
+    item.buyExchange.toUpperCase().includes('MEXC') ||
+    item.sellExchange.toUpperCase().includes('MEXC');
 
-  const negatives = opportunities
-    .filter(item => item.spread <= -settings.negativeThreshold && item.spread < 0)
-    .sort((a, b) => a.spread - b.spread);
+  return involvesMexc
+    ? Math.max(Number(configuredThreshold) || 0, 1.30)
+    : Number(configuredThreshold) || 0;
+}
+
+const positives = opportunities
+  .filter(item =>
+    item.spread > 0 &&
+    item.spread >= getAlertThreshold(item, settings.positiveThreshold)
+  )
+  .sort((a, b) => b.spread - a.spread);
+
+const negatives = opportunities
+  .filter(item =>
+    item.spread < 0 &&
+    item.spread <= -getAlertThreshold(item, settings.negativeThreshold)
+  )
+  .sort((a, b) => a.spread - b.spread);
+
 
   if (settings.positiveEnabled && positives.length) {
     const best = positives[0];
