@@ -1,3 +1,4 @@
+
 * {
   box-sizing: border-box;
 }
@@ -54,6 +55,28 @@ header,
   justify-content: space-between;
 }
 
+header {
+  margin-bottom: 22px;
+}
+
+.header-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+#updated {
+  color: #91a2b4;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 h1 {
   margin: 0;
   font-size: 24px;
@@ -79,27 +102,71 @@ button {
   cursor: pointer;
 }
 
-.hero {
+/* RESUMO CEX E DEX */
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
   margin: 22px 0;
+  scroll-margin-top: 20px;
+}
+
+.hero {
+  margin: 0;
   background: linear-gradient(110deg, #15372f, #172a3b);
   border: 1px solid #285447;
   border-radius: 14px;
-  padding: 25px;
+  padding: 22px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
+  gap: 15px;
+  min-width: 0;
+  min-height: 175px;
+}
+
+.summary-content {
+  min-width: 0;
 }
 
 .hero h2 {
-  font-size: 42px;
+  font-size: 38px;
   margin: 8px 0;
+  overflow-wrap: anywhere;
 }
 
 .hero input {
   display: block;
   margin-top: 8px;
   width: 130px;
+}
+
+.hero label {
+  flex-shrink: 0;
+}
+
+.cex-summary {
+  border-color: #285447;
+}
+
+.dex-summary {
+  background: linear-gradient(110deg, #142b3c, #172b40);
+  border-color: #31516b;
+}
+
+.dex-summary h2 {
+  color: #aab7c5;
+}
+
+.dex-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #91a2b4;
+  font-size: 11px;
+  white-space: nowrap;
+  align-self: flex-start;
 }
 
 .positive {
@@ -114,9 +181,11 @@ button {
   color: #aab7c5;
 }
 
+/* INDICADORES */
+
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
   margin: 15px 0;
 }
@@ -137,6 +206,7 @@ button {
 
 .panel {
   margin: 15px 0;
+  scroll-margin-top: 20px;
 }
 
 .exchanges {
@@ -293,6 +363,17 @@ footer {
   color: #7e90a3;
 }
 
+/* OUTRAS OPORTUNIDADES */
+
+.other-opportunities {
+  scroll-margin-top: 20px;
+}
+
+.other-opportunities h2 {
+  font-size: 18px;
+  margin-top: 0;
+}
+
 /* BOTÕES DAS CORRETORAS */
 
 .exchange-buttons {
@@ -325,7 +406,7 @@ footer {
   display: none !important;
 }
 
-/* NOVA ÁREA DE OPORTUNIDADES DEX */
+/* ÁREA DE OPORTUNIDADES DEX */
 
 .dex-opportunities {
   border: 1px solid #31516b;
@@ -373,6 +454,7 @@ footer {
   border-radius: 50%;
   background: #55b9ff;
   box-shadow: 0 0 9px #55b9ff;
+  flex-shrink: 0;
 }
 
 .dex-opportunities .exchange-filters {
@@ -463,25 +545,50 @@ footer {
     padding: 14px;
   }
 
+  header {
+    gap: 9px;
+  }
+
   header h1 {
     font-size: 19px;
   }
 
   header p {
     font-size: 11px;
+    margin-bottom: 0;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  #updated {
+    font-size: 10px;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .hero {
     align-items: flex-start;
-    flex-direction: column;
+    min-height: 150px;
+    padding: 18px;
+  }
+
+  .hero h2 {
+    font-size: 34px;
+  }
+
+  .dex-summary-status {
+    font-size: 10px;
   }
 
   .stats {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .stats article:last-child {
-    grid-column: span 2;
   }
 
   .exchanges {
@@ -538,5 +645,28 @@ footer {
     inset: 0;
     background: rgba(0,0,0,.65);
     z-index: 1000;
+  }
+}
+
+@media(max-width: 430px) {
+  header h1 {
+    font-size: 17px;
+  }
+
+  header p {
+    max-width: 190px;
+  }
+
+  #refresh {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .hero {
+    flex-wrap: wrap;
+  }
+
+  .dex-summary-status {
+    align-self: flex-end;
   }
 }
