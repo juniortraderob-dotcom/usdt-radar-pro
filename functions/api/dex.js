@@ -1,12 +1,12 @@
 
-const QUOTER_V2 = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e';
+const ZEROX_API_URL = 'https://api.0x.org/swap/allowance-holder/price';
 
 const TOKENS = {
   'USDT/BRLA': {
     inputSymbol: 'BRLA',
     inputAddress: '0xe6a537a407488807f0bbeb0038b79004f19dddfb',
     inputDecimals: 18,
-    outputSymbol: 'USDT0',
+    outputSymbol: 'USDT',
     outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
     outputDecimals: 6
   },
@@ -14,28 +14,11 @@ const TOKENS = {
     inputSymbol: 'BRZ',
     inputAddress: '0x4eD141110F6EeeAbA9A1df36d8c26f684d2475Dc',
     inputDecimals: 18,
-    outputSymbol: 'USDT0',
+    outputSymbol: 'USDT',
     outputAddress: '0xc2132D05D31c914a87C6611c10748AEb04B58e8F',
     outputDecimals: 6
   }
 };
-
-const RPCS = [
-  { id: 0, name: 'Polygon RPC', url: 'https://polygon-rpc.com' },
-  { id: 1, name: 'dRPC', url: 'https://polygon.drpc.org' },
-  { id: 2, name: '1RPC', url: 'https://1rpc.io/matic' }
-];
-
-const FEE_TIERS = [100, 500, 3000, 10000];
-const SELECTOR = 'c6a5026a';
-
-function word(value) {
-  return BigInt(value).toString(16).padStart(64, '0');
-}
-
-function addressWord(address) {
-  return address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
-}
 
 function parseUnits(value, decimals) {
   const normalized = String(value).trim().replace(',', '.');
@@ -61,128 +44,67 @@ function formatUnits(value, decimals) {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-function encodeQuote(tokenIn, tokenOut, amountIn, fee) {
-  return '0x' +
-    SELECTOR +
-    addressWord(tokenIn) +
-    addressWord(tokenOut) +
-    word(amountIn) +
-    word(fee) +
-    word(0);
-}
+async function getZeroXPrice(context, token, amountIn) {
+  const apiKey = context.env.ZEROX_API_KEY;
 
-async function rpcCall(rpc, data) {
-  const response = await fetch(rpc.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'eth_call',
-      params: [
-        { to: QUOTER_V2, data },
-        'latest'
-      ]
-    }),
-    signal: AbortSignal.timeout(10000)
+  if (!apiKey) {
+    throw new Error('ZEROX_API_KEY não configurada na Cloudflare.');
+  }
+
+  const params = new URLSearchParams({
+    chainId: '137',
+    sellToken: token.inputAddress,
+    buyToken: token.outputAddress,
+    sellAmount: amountIn.toString()
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const json = await response.json();
-
-  if (json.error) {
-    throw new Error(json.error.message || 'Erro RPC');
-  }
-
-  if (!json.result || json.result === '0x') {
-    throw new Error('Resposta vazia do contrato');
-  }
-
-  return json.result;
-}
-
-function decodeAmountOut(result, decimals) {
-  const hex = result.startsWith('0x') ? result.slice(2) : result;
-
-  if (hex.length < 64) {
-    throw new Error('Resposta ABI incompleta');
-  }
-
-  const raw = BigInt('0x' + hex.slice(0, 64));
-
-  return {
-    raw: raw.toString(),
-    formatted: formatUnits(raw, decimals)
-  };
-}
-
-async function quoteWithRpc(rpc, token, amountIn) {
-  const attempts = await Promise.allSettled(
-    FEE_TIERS.map(async fee => {
-      const calldata = encodeQuote(
-        token.inputAddress,
-        token.outputAddress,
-        amountIn,
-        fee
-      );
-
-      const result = await rpcCall(rpc, calldata);
-      const decoded = decodeAmountOut(
-        result,
-        token.outputDecimals
-      );
-
-      return {
-        fee,
-        amountOut: decoded.formatted,
-        amountOutRaw: decoded.raw,
-        rawResponse: result,
-        calldata
-      };
-    })
+  const response = await fetch(
+    `${ZEROX_API_URL}?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        '0x-api-key': apiKey,
+        '0x-version': 'v2',
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(15000)
+    }
   );
 
-  const diagnostics = attempts.map((item, index) => {
-    if (item.status === 'fulfilled') {
-      return {
-        status: 'OK',
-        ...item.value
-      };
-    }
+  const data = await response.json();
 
-    return {
-      status: 'ERRO',
-      fee: FEE_TIERS[index],
-      error: String(
-        item.reason?.message || item.reason
-      ).slice(0, 250)
-    };
-  });
+  if (!response.ok) {
+    const message =
+      data?.reason ||
+      data?.message ||
+      data?.validationErrors?.[0]?.reason ||
+      `Erro HTTP ${response.status}`;
 
-  const valid = diagnostics
-    .filter(item => item.status === 'OK')
-    .filter(item => BigInt(item.amountOutRaw) > 0n)
-    .sort((a, b) => {
-      const x = BigInt(a.amountOutRaw);
-      const y = BigInt(b.amountOutRaw);
-      return x > y ? -1 : x < y ? 1 : 0;
-    });
+    throw new Error(`0x API: ${message}`);
+  }
+
+  if (!data.buyAmount) {
+    throw new Error('A 0x não retornou uma quantidade de saída.');
+  }
+
+  if (data.liquidityAvailable === false) {
+    throw new Error('A 0x informou que não há liquidez disponível.');
+  }
+
+  const outputRaw = BigInt(data.buyAmount);
+
+  if (outputRaw <= 0n) {
+    throw new Error('Quantidade de saída inválida.');
+  }
 
   return {
-    rpc: rpc.name,
-    rpcUrl: rpc.url,
-    status: valid.length ? 'OK' : 'SEM COTAÇÃO',
-    bestQuote: valid.length ? {
-      feeTier: valid[0].fee,
-      outputAmount: valid[0].amountOut,
-      outputAmountRaw: valid[0].amountOutRaw,
-      rawResponse: valid[0].rawResponse,
-      calldata: valid[0].calldata
-    } : null,
-    allFeeTiers: diagnostics
+    amountOut: formatUnits(outputRaw, token.outputDecimals),
+    amountOutRaw: outputRaw.toString(),
+    price: data.price ?? null,
+    estimatedPriceImpact: data.estimatedPriceImpact ?? null,
+    liquidityAvailable: data.liquidityAvailable ?? null,
+    route: data.route ?? null,
+    rawResponse: data
   };
 }
 
@@ -216,71 +138,88 @@ export async function onRequestGet(context) {
     );
   }
 
-  const rpcParam = url.searchParams.get('rpc') || 'all';
+  try {
+    const quote = await getZeroXPrice(context, token, amountIn);
 
-  let selectedRpcs;
+    const result = {
+      rpc: '0x Swap API',
+      status: 'OK',
+      bestQuote: {
+        feeTier: null,
+        outputAmount: quote.amountOut,
+        outputAmountRaw: quote.amountOutRaw,
+        price: quote.price,
+        estimatedPriceImpact: quote.estimatedPriceImpact,
+        liquidityAvailable: quote.liquidityAvailable,
+        rawResponse: quote.rawResponse
+      },
+      allFeeTiers: []
+    };
 
-  if (rpcParam === 'all') {
-    selectedRpcs = RPCS;
-  } else {
-    const id = Number(rpcParam);
-    selectedRpcs = RPCS.filter(rpc => rpc.id === id);
+    return Response.json(
+      {
+        diagnosticMode: true,
+        source: '0x Swap API v2',
+        network: 'Polygon',
+        chainId: 137,
+        pair,
+        direction: `${token.inputSymbol} → ${token.outputSymbol}`,
 
-    if (!selectedRpcs.length) {
-      return Response.json(
-        { error: 'RPC inválido. Use 0, 1, 2 ou all.' },
-        { status: 400 }
-      );
-    }
-  }
+        inputAmount: String(capital).replace(',', '.'),
+        inputAmountUnits: amountIn.toString(),
 
-  const results = await Promise.all(
-    selectedRpcs.map(async rpc => {
-      try {
-        return await quoteWithRpc(rpc, token, amountIn);
-      } catch (error) {
-        return {
-          rpc: rpc.name,
-          rpcUrl: rpc.url,
+        inputSymbol: token.inputSymbol,
+        inputAddress: token.inputAddress,
+        inputDecimals: token.inputDecimals,
+
+        outputSymbol: token.outputSymbol,
+        outputAddress: token.outputAddress,
+        outputDecimals: token.outputDecimals,
+
+        status: 'OK',
+        bestQuote: result.bestQuote,
+        rpcResults: [result],
+
+        note: 'Preço indicativo consultado pela 0x. Não executa swap. Validar liquidez, impacto e custos antes de qualquer operação.',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+        }
+      }
+    );
+
+  } catch (error) {
+    return Response.json(
+      {
+        diagnosticMode: true,
+        source: '0x Swap API v2',
+        network: 'Polygon',
+        chainId: 137,
+        pair,
+        direction: `${token.inputSymbol} → ${token.outputSymbol}`,
+        inputAmount: String(capital).replace(',', '.'),
+        inputAmountUnits: amountIn.toString(),
+        inputSymbol: token.inputSymbol,
+        outputSymbol: token.outputSymbol,
+        status: 'ERRO',
+        error: String(error?.message || error).slice(0, 500),
+        rpcResults: [{
+          rpc: '0x Swap API',
           status: 'ERRO',
-          error: String(error?.message || error).slice(0, 300)
-        };
+          error: String(error?.message || error).slice(0, 500)
+        }],
+        updatedAt: new Date().toISOString()
+      },
+      {
+        status: 502,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
+        }
       }
-    })
-  );
-
-  return Response.json(
-    {
-      diagnosticMode: true,
-      source: 'Uniswap V3 QuoterV2',
-      network: 'Polygon',
-      chainId: 137,
-      pair,
-      direction: `${token.inputSymbol} → ${token.outputSymbol}`,
-
-      inputAmount: String(capital).replace(',', '.'),
-      inputAmountUnits: amountIn.toString(),
-      inputAmountHex: '0x' + word(amountIn),
-
-      inputSymbol: token.inputSymbol,
-      inputAddress: token.inputAddress,
-      inputDecimals: token.inputDecimals,
-
-      outputSymbol: token.outputSymbol,
-      outputAddress: token.outputAddress,
-      outputDecimals: token.outputDecimals,
-
-      rpcTest: rpcParam,
-      rpcResults: results,
-
-      note: 'Diagnóstico de RPC. Cotação simulada, sem execução de swap. Não utilizar para operações reais.',
-      updatedAt: new Date().toISOString()
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
-      }
-    }
-  );
+    );
+  }
 }
