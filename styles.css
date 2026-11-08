@@ -19,3 +19,12 @@
     z-index:1000;
   }
 }
+/* Corrige o espaçamento entre nome e status das corretoras */
+.source span:first-child {
+  float: none;
+  margin-right: 8px;
+}
+
+.source span:last-child {
+  float: right;
+}
