@@ -21,9 +21,9 @@ const TOKENS = {
 };
 
 const RPCS = [
-  'https://polygon-rpc.com',
-  'https://polygon.drpc.org',
-  'https://1rpc.io/matic'
+  { id: 0, name: 'Polygon RPC', url: 'https://polygon-rpc.com' },
+  { id: 1, name: 'dRPC', url: 'https://polygon.drpc.org' },
+  { id: 2, name: '1RPC', url: 'https://1rpc.io/matic' }
 ];
 
 const FEE_TIERS = [100, 500, 3000, 10000];
@@ -72,7 +72,7 @@ function encodeQuote(tokenIn, tokenOut, amountIn, fee) {
 }
 
 async function rpcCall(rpc, data) {
-  const response = await fetch(rpc, {
+  const response = await fetch(rpc.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -88,17 +88,17 @@ async function rpcCall(rpc, data) {
   });
 
   if (!response.ok) {
-    throw new Error(`RPC HTTP ${response.status}`);
+    throw new Error(`HTTP ${response.status}`);
   }
 
   const json = await response.json();
 
   if (json.error) {
-    throw new Error(json.error.message || 'Erro na consulta RPC');
+    throw new Error(json.error.message || 'Erro RPC');
   }
 
   if (!json.result || json.result === '0x') {
-    throw new Error('Contrato retornou resposta vazia.');
+    throw new Error('Resposta vazia do contrato');
   }
 
   return json.result;
@@ -108,7 +108,7 @@ function decodeAmountOut(result, decimals) {
   const hex = result.startsWith('0x') ? result.slice(2) : result;
 
   if (hex.length < 64) {
-    throw new Error('Resposta ABI incompleta.');
+    throw new Error('Resposta ABI incompleta');
   }
 
   const raw = BigInt('0x' + hex.slice(0, 64));
@@ -168,17 +168,21 @@ async function quoteWithRpc(rpc, token, amountIn) {
     .sort((a, b) => {
       const x = BigInt(a.amountOutRaw);
       const y = BigInt(b.amountOutRaw);
-
       return x > y ? -1 : x < y ? 1 : 0;
     });
 
-  if (!valid.length) {
-    throw new Error('Nenhum pool retornou cotação válida.');
-  }
-
   return {
-    best: valid[0],
-    diagnostics
+    rpc: rpc.name,
+    rpcUrl: rpc.url,
+    status: valid.length ? 'OK' : 'SEM COTAÇÃO',
+    bestQuote: valid.length ? {
+      feeTier: valid[0].fee,
+      outputAmount: valid[0].amountOut,
+      outputAmountRaw: valid[0].amountOutRaw,
+      rawResponse: valid[0].rawResponse,
+      calldata: valid[0].calldata
+    } : null,
+    allFeeTiers: diagnostics
   };
 }
 
@@ -190,14 +194,11 @@ export async function onRequestGet(context) {
 
   if (!token) {
     return Response.json(
-      {
-        error: 'Par não suportado. Utilize USDT/BRLA ou USDT/BRZ.'
-      },
+      { error: 'Use USDT/BRLA ou USDT/BRZ.' },
       { status: 400 }
     );
   }
 
-  // capital representa a quantidade de BRLA ou BRZ enviada.
   const capital = url.searchParams.get('capital') || '1000';
 
   let amountIn;
@@ -206,7 +207,7 @@ export async function onRequestGet(context) {
     amountIn = parseUnits(capital, token.inputDecimals);
 
     if (amountIn <= 0n) {
-      throw new Error('A quantidade precisa ser maior que zero.');
+      throw new Error('Quantidade deve ser maior que zero.');
     }
   } catch (error) {
     return Response.json(
@@ -215,81 +216,69 @@ export async function onRequestGet(context) {
     );
   }
 
-  const failures = [];
+  const rpcParam = url.searchParams.get('rpc') || 'all';
 
-  for (const rpc of RPCS) {
-    try {
-      const quote = await quoteWithRpc(rpc, token, amountIn);
+  let selectedRpcs;
 
+  if (rpcParam === 'all') {
+    selectedRpcs = RPCS;
+  } else {
+    const id = Number(rpcParam);
+    selectedRpcs = RPCS.filter(rpc => rpc.id === id);
+
+    if (!selectedRpcs.length) {
       return Response.json(
-        {
-          diagnosticMode: true,
-          source: 'Uniswap V3 QuoterV2',
-          network: 'Polygon',
-          chainId: 137,
-
-          rpcUsed: rpc,
-          pair,
-
-          direction: `${token.inputSymbol} → ${token.outputSymbol}`,
-
-          inputAmount: String(capital).replace(',', '.'),
-          inputAmountUnits: amountIn.toString(),
-          inputAmountHex: '0x' + word(amountIn),
-
-          inputSymbol: token.inputSymbol,
-          inputAddress: token.inputAddress,
-          inputDecimals: token.inputDecimals,
-
-          outputSymbol: token.outputSymbol,
-          outputAddress: token.outputAddress,
-          outputDecimals: token.outputDecimals,
-
-          bestQuote: {
-            feeTier: quote.best.fee,
-            outputAmount: quote.best.amountOut,
-            outputAmountRaw: quote.best.amountOutRaw,
-            rawResponse: quote.best.rawResponse,
-            calldata: quote.best.calldata
-          },
-
-          allFeeTiers: quote.diagnostics,
-
-          note: 'Modo de diagnóstico. Cotação simulada em pool Uniswap V3. Não executar operações com estes dados antes da validação.',
-          updatedAt: new Date().toISOString()
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
-          }
-        }
+        { error: 'RPC inválido. Use 0, 1, 2 ou all.' },
+        { status: 400 }
       );
-
-    } catch (error) {
-      failures.push({
-        rpc,
-        error: String(error?.message || error).slice(0, 250)
-      });
     }
   }
+
+  const results = await Promise.all(
+    selectedRpcs.map(async rpc => {
+      try {
+        return await quoteWithRpc(rpc, token, amountIn);
+      } catch (error) {
+        return {
+          rpc: rpc.name,
+          rpcUrl: rpc.url,
+          status: 'ERRO',
+          error: String(error?.message || error).slice(0, 300)
+        };
+      }
+    })
+  );
 
   return Response.json(
     {
       diagnosticMode: true,
       source: 'Uniswap V3 QuoterV2',
       network: 'Polygon',
+      chainId: 137,
       pair,
-      inputAmount: String(capital),
+      direction: `${token.inputSymbol} → ${token.outputSymbol}`,
+
+      inputAmount: String(capital).replace(',', '.'),
       inputAmountUnits: amountIn.toString(),
-      error: 'Nenhum RPC conseguiu confirmar uma cotação.',
-      rpcFailures: failures,
-      note: 'Nenhuma cotação confirmada. Não utilizar para arbitragem.',
+      inputAmountHex: '0x' + word(amountIn),
+
+      inputSymbol: token.inputSymbol,
+      inputAddress: token.inputAddress,
+      inputDecimals: token.inputDecimals,
+
+      outputSymbol: token.outputSymbol,
+      outputAddress: token.outputAddress,
+      outputDecimals: token.outputDecimals,
+
+      rpcTest: rpcParam,
+      rpcResults: results,
+
+      note: 'Diagnóstico de RPC. Cotação simulada, sem execução de swap. Não utilizar para operações reais.',
       updatedAt: new Date().toISOString()
     },
     {
-      status: 503,
       headers: {
+        'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
       }
     }
