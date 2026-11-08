@@ -1,110 +1,78 @@
+
 const EXCHANGES = [
-  'Binance', 'OKX', 'Bybit', 'Bitget',
-  'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
+  'Binance','OKX','Bybit','Bitget',
+  'MEXC','KuCoin','Foxbit','Bitso'
 ];
 
 const PENDING = 'Integração pendente';
-const TIMEOUT_MS = 10000;
 
-async function fetchJson(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+async function fetchJson(url){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),9000);
 
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'USDT-Radar-Pro/1.0'
-      },
-      signal: controller.signal,
-      cf: {
-        cacheTtl: 0,
-        cacheEverything: false
-      }
+  try{
+    const response=await fetch(url,{
+      headers:{Accept:'application/json'},
+      signal:controller.signal,
+      cf:{cacheTtl:0,cacheEverything:false}
     });
 
-    const body = await response.text();
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${body.slice(0, 150)}`);
-    }
-
-    return JSON.parse(body);
-  } finally {
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    return await response.json();
+  }finally{
     clearTimeout(timer);
   }
 }
 
-function validLevel(level) {
-  if (!Array.isArray(level) || level.length < 2) return false;
-
-  const price = Number(level[0]);
-  const quantity = Number(level[1]);
-
-  return Number.isFinite(price) &&
-    price > 0 &&
-    Number.isFinite(quantity) &&
-    quantity > 0;
+function validLevel(level){
+  return Array.isArray(level)&&level.length>=2&&
+    Number.isFinite(Number(level[0]))&&Number(level[0])>0&&
+    Number.isFinite(Number(level[1]))&&Number(level[1])>0;
 }
 
-function makeQuote(exchange, bid, bidQty, ask, askQty) {
+function quote(exchange,bid,bidQuantity,ask,askQuantity){
   return {
     exchange,
-    pair: 'USDT/BRL',
-    bid: Number(bid),
-    bidQuantity: Number(bidQty),
-    ask: Number(ask),
-    askQuantity: Number(askQty)
+    pair:'USDT/BRL',
+    bid:Number(bid),
+    bidQuantity:Number(bidQuantity),
+    ask:Number(ask),
+    askQuantity:Number(askQuantity)
   };
 }
 
-// MEXC: mercado BRL/USDT convertido para USDT/BRL.
-async function getMexcQuote() {
-  const symbol = 'BRLUSDT';
+async function getMexcQuote(){
+  const symbol='BRLUSDT';
 
-  const info = await fetchJson(
+  const info=await fetchJson(
     `https://api.mexc.com/api/v3/exchangeInfo?symbol=${symbol}`
   );
 
-  const market = info.symbols?.find(item =>
-    item.symbol === symbol &&
-    (
-      item.status === '1' ||
-      item.status === 1 ||
-      item.status === 'ENABLED'
-    ) &&
-    item.isSpotTradingAllowed !== false
-  );
+  const market=info.symbols?.find(item=>item.symbol===symbol);
 
-  if (!market) {
-    throw new Error('Par BRLUSDT não listado ou indisponível');
-  }
+  if(!market)throw new Error('Par BRLUSDT não encontrado na MEXC');
 
-  const book = await fetchJson(
+  const book=await fetchJson(
     `https://api.mexc.com/api/v3/depth?symbol=${symbol}&limit=5`
   );
 
-  if (
-    !validLevel(book.bids?.[0]) ||
-    !validLevel(book.asks?.[0])
-  ) {
-    throw new Error('Livro de ofertas vazio');
+  if(!validLevel(book.bids?.[0])||!validLevel(book.asks?.[0])){
+    throw new Error('Livro MEXC sem ofertas válidas');
   }
 
-  const bidBRLUSDT = Number(book.bids[0][0]);
-  const bidQtyBRL = Number(book.bids[0][1]);
+  const bidBRL=Number(book.bids[0][0]);
+  const bidQtyBRL=Number(book.bids[0][1]);
+  const askBRL=Number(book.asks[0][0]);
+  const askQtyBRL=Number(book.asks[0][1]);
 
-  const askBRLUSDT = Number(book.asks[0][0]);
-  const askQtyBRL = Number(book.asks[0][1]);
+  // Conversão do livro BRL/USDT para USDT/BRL.
+  const bidUSDTBRL=1/askBRL;
+  const askUSDTBRL=1/bidBRL;
 
-  // Inverte bid e ask ao converter BRL/USDT para USDT/BRL.
-  const bidUSDTBRL = 1 / askBRLUSDT;
-  const askUSDTBRL = 1 / bidBRLUSDT;
+  const bidQtyUSDT=askQtyBRL*askBRL;
+  const askQtyUSDT=bidQtyBRL*bidBRL;
 
-  const bidQtyUSDT = askQtyBRL * askBRLUSDT;
-  const askQtyUSDT = bidQtyBRL * bidBRLUSDT;
-
-  return makeQuote(
+  return quote(
     'MEXC',
     bidUSDTBRL,
     bidQtyUSDT,
@@ -113,66 +81,96 @@ async function getMexcQuote() {
   );
 }
 
-function errorStatus(error) {
-  return (
-    'Erro: ' +
-    String(error?.message || 'Erro desconhecido')
-      .replace(/[\r\n]/g, ' ')
-      .slice(0, 90)
-  );
-}
-
-export async function onRequestGet(context) {
-  const url = new URL(context.request.url);
-  const requestedPair = url.searchParams.get('pair') || 'USDT/BRL';
-
-  const allowedPairs = [
-    'USDT/BRL',
-    'USDT/BRLA',
-    'USDT/BRL1',
-    'USDT/BRZ'
+async function getBinanceQuote(){
+  const hosts=[
+    'https://api1.binance.com',
+    'https://data-api.binance.vision',
+    'https://api.binance.com'
   ];
 
-  const pair = allowedPairs.includes(requestedPair)
-    ? requestedPair
-    : 'USDT/BRL';
+  let lastError;
 
-  const statuses = Object.fromEntries(
-    EXCHANGES.map(name => [name, PENDING])
-  );
+  for(const host of hosts){
+    try{
+      const book=await fetchJson(
+        `${host}/api/v3/depth?symbol=USDTBRL&limit=5`
+      );
 
-  const quotes = [];
+      if(!validLevel(book.bids?.[0])||!validLevel(book.asks?.[0])){
+        throw new Error('Livro Binance sem ofertas válidas');
+      }
 
-  if (pair === 'USDT/BRL') {
-    try {
-      const quote = await getMexcQuote();
-      quotes.push(quote);
-      statuses.MEXC = 'Online';
-    } catch (error) {
-      statuses.MEXC = errorStatus(error);
+      return quote(
+        'Binance',
+        book.bids[0][0],
+        book.bids[0][1],
+        book.asks[0][0],
+        book.asks[0][1]
+      );
+    }catch(error){
+      lastError=error;
     }
-  } else {
-    statuses.MEXC = 'Par ainda não integrado';
   }
 
-  return Response.json(
-    {
-      updatedAt: new Date().toISOString(),
-      pair,
-      onlineCount: Object.values(statuses).filter(
-        status => status === 'Online'
-      ).length,
-      statuses,
-      quotes,
-      opportunities: [],
-      message:
-        'Cotações públicas do primeiro nível do livro. Verifique profundidade, taxas e limites antes de operar.'
-    },
-    {
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
-        'Pragma': 'no-cache'
-      }
-    }
+  throw lastError||new Error('Binance indisponível');
+}
+
+function errorMessage(error){
+  return 'Erro: '+String(error?.message||'Falha na consulta')
+    .replace(/[\r\n]/g,' ').slice(0,100);
+}
+
+export async function onRequestGet(context){
+  const url=new URL(context.request.url);
+  const requestedPair=url.searchParams.get('pair')||'USDT/BRL';
+
+  const allowed=[
+    'USDT/BRL','USDT/BRLA','USDT/BRL1','USDT/BRZ'
+  ];
+
+  const pair=allowed.includes(requestedPair)?requestedPair:'USDT/BRL';
+
+  const statuses=Object.fromEntries(
+    EXCHANGES.map(name=>[name,PENDING])
   );
+
+  const quotes=[];
+
+  if(pair==='USDT/BRL'){
+    const results=await Promise.allSettled([
+      getBinanceQuote(),
+      getMexcQuote()
+    ]);
+
+    results.forEach((result,index)=>{
+      const name=index===0?'Binance':'MEXC';
+
+      if(result.status==='fulfilled'){
+        quotes.push(result.value);
+        statuses[name]='Online';
+      }else{
+        statuses[name]=errorMessage(result.reason);
+      }
+    });
+  }else{
+    statuses.Binance='Par ainda não integrado';
+    statuses.MEXC='Par ainda não integrado';
+  }
+
+  const onlineCount=Object.values(statuses)
+    .filter(status=>status==='Online').length;
+
+  return Response.json({
+    updatedAt:new Date().toISOString(),
+    pair,
+    onlineCount,
+    statuses,
+    quotes,
+    message:'Cotações públicas do primeiro nível do livro. Confira profundidade, taxas e limites antes de operar.'
+  },{
+    headers:{
+      'Cache-Control':'no-store, no-cache, must-revalidate',
+      'Pragma':'no-cache'
+    }
+  });
 }
