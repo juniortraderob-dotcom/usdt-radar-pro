@@ -1,320 +1,212 @@
+
 const $ = id => document.getElementById(id);
 
 const names = [
-  'Binance', 'OKX', 'Bybit', 'Bitget',
-  'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
+  'Binance','OKX','Bybit','Bitget',
+  'MEXC','KuCoin','Foxbit','Bitso'
 ];
 
-function money(value) {
-  return Number(value).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
+let latestOpportunities = [];
+
+function money(value){
+  return Number(value).toLocaleString('pt-BR',{
+    style:'currency',currency:'BRL'
   });
 }
 
-function color(element, value) {
-  element.className =
-    value > 0 ? 'positive' :
-    value < 0 ? 'negative' : 'neutral';
+function safe(value){
+  return String(value).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
 }
 
-async function getBinanceQuote() {
-  const hosts = [
-    'https://api1.binance.com',
-    'https://data-api.binance.vision',
-    'https://api.binance.com'
-  ];
-
-  let lastError;
-
-  for (const host of hosts) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const response = await fetch(
-        `${host}/api/v3/depth?symbol=USDTBRL&limit=5`,
-        {
-          cache: 'no-store',
-          signal: controller.signal
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const book = await response.json();
-      const bid = book.bids?.[0];
-      const ask = book.asks?.[0];
-
-      if (!bid || !ask) {
-        throw new Error('Livro de ofertas vazio');
-      }
-
-      const quote = {
-        exchange: 'Binance',
-        pair: 'USDT/BRL',
-        bid: Number(bid[0]),
-        bidQuantity: Number(bid[1]),
-        ask: Number(ask[0]),
-        askQuantity: Number(ask[1])
-      };
-
-      if (
-        ![
-          quote.bid,
-          quote.bidQuantity,
-          quote.ask,
-          quote.askQuantity
-        ].every(Number.isFinite) ||
-        quote.bid <= 0 ||
-        quote.ask <= 0 ||
-        quote.bidQuantity <= 0 ||
-        quote.askQuantity <= 0
-      ) {
-        throw new Error('Cotação inválida');
-      }
-
-      return quote;
-
-    } catch (error) {
-      lastError = error;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  throw lastError || new Error('Binance indisponível');
+function setupFilters(){
+  ['buyFilter','sellFilter'].forEach(id=>{
+    names.forEach(name=>{
+      const option=document.createElement('option');
+      option.value=name;
+      option.textContent=name;
+      $(id).appendChild(option);
+    });
+  });
 }
 
-function renderExchanges(statuses) {
-  const container = $('exchanges');
+function renderExchanges(statuses){
+  const container=$('exchanges');
   container.replaceChildren();
 
-  names.forEach(name => {
-    const card = document.createElement('div');
-    card.className = 'source';
+  names.forEach(name=>{
+    const card=document.createElement('div');
+    card.className='source';
 
-    const title = document.createElement('span');
-    title.textContent = name;
+    const title=document.createElement('strong');
+    title.textContent=name;
 
-    const status = document.createElement('span');
-    status.textContent = statuses[name] || 'Integração pendente';
-    status.className =
-      status.textContent === 'Online' ? 'positive' : 'neutral';
+    const status=document.createElement('span');
+    status.textContent=statuses[name]||'Integração pendente';
+    status.className=status.textContent==='Online'?'positive':'neutral';
 
-    card.append(title, status);
+    card.append(title,status);
     container.appendChild(card);
   });
 }
 
-function calculateOpportunities(quotes) {
-  const opportunities = [];
+function calculateOpportunities(quotes){
+  const results=[];
 
-  for (const buy of quotes) {
-    for (const sell of quotes) {
-      if (
-        buy.exchange === sell.exchange ||
-        buy.pair !== sell.pair
-      ) continue;
+  for(const buy of quotes){
+    for(const sell of quotes){
+      if(buy.exchange===sell.exchange || buy.pair!==sell.pair) continue;
 
-      const spreadPct =
-        ((sell.bid - buy.ask) / buy.ask) * 100;
+      const spread=((sell.bid-buy.ask)/buy.ask)*100;
+      if(!Number.isFinite(spread)) continue;
 
-      if (!Number.isFinite(spreadPct) || spreadPct <= 0) {
-        continue;
-      }
-
-      opportunities.push({
-        buyExchange: buy.exchange,
-        sellExchange: sell.exchange,
-        pair: buy.pair,
-        ask: buy.ask,
-        bid: sell.bid,
-        spreadPct,
-        maxBaseQuantity: Math.min(
-          buy.askQuantity,
-          sell.bidQuantity
-        )
+      results.push({
+        buyExchange:buy.exchange,
+        sellExchange:sell.exchange,
+        pair:buy.pair,
+        ask:buy.ask,
+        bid:sell.bid,
+        spread,
+        quantity:Math.min(buy.askQuantity,sell.bidQuantity)
       });
     }
   }
 
-  return opportunities.sort(
-    (a, b) => b.spreadPct - a.spreadPct
-  );
+  return results.sort((a,b)=>b.spread-a.spread);
 }
 
-async function refresh() {
-  const pair = $('pair').value;
-  $('updated').textContent = 'Consultando...';
+function renderOpportunities(){
+  const capital=Math.max(0,Number($('capital').value)||0);
+  const buy=$('buyFilter').value;
+  const sell=$('sellFilter').value;
+  const filter=$('resultFilter').value;
 
-  const statuses = Object.fromEntries(
-    names.map(name => [name, 'Integração pendente'])
-  );
+  const filtered=latestOpportunities.filter(item=>{
+    if(buy!=='all'&&item.buyExchange!==buy)return false;
+    if(sell!=='all'&&item.sellExchange!==sell)return false;
+    if(filter==='positive'&&item.spread<=0)return false;
+    if(filter==='negative'&&item.spread>=0)return false;
+    return true;
+  });
 
-  const quotes = [];
+  $('count').textContent=latestOpportunities.filter(x=>x.spread>0).length;
 
-  try {
-    // Consulta a MEXC pela API da Cloudflare.
-    const response = await fetch(
-      '/api/markets?pair=' + encodeURIComponent(pair),
-      { cache: 'no-store' }
-    );
+  if(!filtered.length){
+    $('rows').innerHTML='<p class="empty-results">Nenhuma combinação disponível para os filtros selecionados.</p>';
+    $('best').textContent='—';
+    $('best').className='neutral';
+    $('profit').textContent='Nenhuma oportunidade calculável';
+    $('route').textContent='Aguardando cotações compatíveis';
+    $('net').textContent=$('includeCosts').checked?'—':'Desativado';
+    return;
+  }
 
-    if (!response.ok) {
-      throw new Error('API HTTP ' + response.status);
-    }
+  $('rows').innerHTML=filtered.map(item=>{
+    const gross=capital*item.spread/100;
+    const cls=item.spread>0?'positive':item.spread<0?'negative':'neutral';
 
-    const data = await response.json();
+    return `
+      <article class="opportunity-card">
+        <div class="exchange-comparison">
+          <div class="exchange-side buy-side">
+            <small>COMPRAR USDT</small>
+            <strong>${safe(item.buyExchange)}</strong>
+            <span>ASK: ${money(item.ask)}</span>
+          </div>
+          <div class="exchange-arrow">→</div>
+          <div class="exchange-side sell-side">
+            <small>VENDER USDT</small>
+            <strong>${safe(item.sellExchange)}</strong>
+            <span>BID: ${money(item.bid)}</span>
+          </div>
+        </div>
+        <div class="opportunity-details">
+          <span>Par: <b>${safe(item.pair)}</b></span>
+          <span>Spread: <b class="${cls}">${item.spread>0?'+':''}${item.spread.toFixed(3)}%</b></span>
+          <span>Lucro/prejuízo bruto: <b class="${cls}">${money(gross)}</b></span>
+          <span>Quantidade disponível no primeiro nível: <b>${item.quantity.toFixed(4)} USDT</b></span>
+        </div>
+      </article>`;
+  }).join('');
 
-    Object.assign(statuses, data.statuses || {});
-    quotes.push(...(data.quotes || []));
+  const best=filtered[0];
+  const gross=capital*best.spread/100;
+  const cls=best.spread>0?'positive':best.spread<0?'negative':'neutral';
 
-    // Consulta Binance diretamente no navegador.
-    if (pair === 'USDT/BRL') {
-      try {
-        const quote = await getBinanceQuote();
-        quotes.push(quote);
-        statuses.Binance = 'Online';
-      } catch (error) {
-        statuses.Binance =
-          'Erro: ' + String(error.message || 'Falha').slice(0, 70);
-      }
-    } else {
-      statuses.Binance = 'Par ainda não integrado';
-    }
+  $('best').textContent=(best.spread>0?'+':'')+best.spread.toFixed(3)+'%';
+  $('best').className=cls;
+  $('profit').textContent=(gross>=0?'Lucro bruto estimado: ':'Prejuízo bruto estimado: ')+money(Math.abs(gross));
+  $('route').textContent=best.buyExchange+' → '+best.sellExchange;
 
+  const cost=Math.max(0,Number($('cost').value)||0);
+  $('net').textContent=$('includeCosts').checked?money(gross-cost):'Desativado';
+
+  $('history').textContent=new Date().toLocaleTimeString('pt-BR')+
+    ' · '+best.buyExchange+' → '+best.sellExchange+
+    ' · '+(best.spread>0?'+':'')+best.spread.toFixed(3)+'%';
+}
+
+async function refresh(){
+  $('updated').textContent='Consultando...';
+
+  try{
+    const pair=$('pair').value;
+    const response=await fetch('/api/markets?pair='+encodeURIComponent(pair),{cache:'no-store'});
+    if(!response.ok)throw new Error('API HTTP '+response.status);
+
+    const data=await response.json();
+    const statuses=data.statuses||{};
     renderExchanges(statuses);
 
-    const onlineCount = Object.values(statuses)
-      .filter(status => status === 'Online').length;
+    $('online').textContent=(data.onlineCount??Object.values(statuses).filter(x=>x==='Online').length)+' / '+names.length;
 
-    $('online').textContent = `${onlineCount} / ${names.length}`;
+    latestOpportunities=calculateOpportunities(data.quotes||[]);
+    renderOpportunities();
 
-    const opportunities = calculateOpportunities(quotes);
-    const minimum = Number($('min').value) || 0;
-
-    const filtered = opportunities.filter(item =>
-      item.pair === pair && item.spreadPct > minimum
-    );
-
-    $('count').textContent = filtered.length;
-    $('updated').textContent =
-      new Date().toLocaleTimeString('pt-BR');
-
-    if (!filtered.length) {
-      $('rows').innerHTML = `
-        <tr>
-          <td colspan="7">
-            Nenhuma oportunidade positiva confirmada para este par.
-          </td>
-        </tr>
-      `;
-
-      $('best').textContent = '—';
-      $('best').className = 'neutral';
-      $('profit').textContent = 'Aguardando oportunidade positiva';
-      $('route').textContent = 'Nenhuma oportunidade confirmada';
-      $('net').textContent =
-        $('includeCosts').checked ? '—' : 'Desativado';
-
-      return;
-    }
-
-    const capital = Math.max(0, Number($('capital').value) || 0);
-
-    $('rows').innerHTML = filtered.map(item => {
-      const gross = capital * item.spreadPct / 100;
-
-      return `
-        <tr>
-          <td>${item.buyExchange}</td>
-          <td>${item.sellExchange}</td>
-          <td>${item.pair}</td>
-          <td>${money(item.ask)}</td>
-          <td>${money(item.bid)}</td>
-          <td class="positive">+${item.spreadPct.toFixed(3)}%</td>
-          <td>${money(gross)}</td>
-        </tr>
-      `;
-    }).join('');
-
-    const best = filtered[0];
-    const gross = capital * best.spreadPct / 100;
-
-    $('best').textContent = '+' + best.spreadPct.toFixed(3) + '%';
-    color($('best'), best.spreadPct);
-
-    $('profit').textContent =
-      money(gross) + ' de lucro bruto estimado';
-
-    $('route').textContent =
-      best.buyExchange + ' → ' + best.sellExchange;
-
-    $('net').textContent = $('includeCosts').checked
-      ? money(gross - Math.max(0, Number($('cost').value) || 0))
-      : 'Desativado';
-
-    $('history').textContent =
-      new Date().toLocaleTimeString('pt-BR') +
-      ' · ' + best.buyExchange +
-      ' → ' + best.sellExchange +
-      ' · +' + best.spreadPct.toFixed(3) + '%';
-
-  } catch (error) {
-    console.error('Erro no radar:', error);
-    $('updated').textContent = 'API indisponível';
-
-    $('rows').innerHTML = `
-      <tr>
-        <td colspan="7">
-          Não foi possível consultar a API. Tente atualizar novamente.
-        </td>
-      </tr>
-    `;
+    $('updated').textContent=new Date().toLocaleTimeString('pt-BR');
+  }catch(error){
+    console.error(error);
+    $('updated').textContent='Erro na consulta';
+    $('rows').textContent='Não foi possível consultar a API. Verifique a conexão e tente novamente.';
   }
 }
 
-$('refresh').addEventListener('click', refresh);
-$('pair').addEventListener('change', refresh);
-$('min').addEventListener('change', refresh);
-$('capital').addEventListener('input', refresh);
-$('cost').addEventListener('input', refresh);
+setupFilters();
 
-$('includeCosts').addEventListener('change', () => {
-  $('cost').disabled = !$('includeCosts').checked;
-  refresh();
+$('refresh').addEventListener('click',refresh);
+$('pair').addEventListener('change',refresh);
+$('buyFilter').addEventListener('change',renderOpportunities);
+$('sellFilter').addEventListener('change',renderOpportunities);
+$('resultFilter').addEventListener('change',renderOpportunities);
+$('capital').addEventListener('input',renderOpportunities);
+$('cost').addEventListener('input',renderOpportunities);
+
+$('includeCosts').addEventListener('change',()=>{
+  $('cost').disabled=!$('includeCosts').checked;
+  renderOpportunities();
 });
 
-const sidebar = $('sidebar');
-const backdrop = document.createElement('div');
-
-backdrop.className = 'menu-backdrop';
-backdrop.hidden = true;
+const sidebar=$('sidebar');
+const backdrop=document.createElement('div');
+backdrop.className='menu-backdrop';
+backdrop.hidden=true;
 document.body.appendChild(backdrop);
 
-function closeMenu() {
+function closeMenu(){
   sidebar.classList.remove('open');
-  backdrop.hidden = true;
+  backdrop.hidden=true;
 }
 
-$('menu').addEventListener('click', () => {
-  const opening = !sidebar.classList.contains('open');
-  sidebar.classList.toggle('open', opening);
-  backdrop.hidden = !opening;
+$('menu').addEventListener('click',()=>{
+  const opening=!sidebar.classList.contains('open');
+  sidebar.classList.toggle('open',opening);
+  backdrop.hidden=!opening;
 });
 
-backdrop.addEventListener('click', closeMenu);
+backdrop.addEventListener('click',closeMenu);
+sidebar.querySelectorAll('a').forEach(link=>link.addEventListener('click',closeMenu));
 
-sidebar.querySelectorAll('a').forEach(link => {
-  link.addEventListener('click', closeMenu);
-});
-
-renderExchanges(
-  Object.fromEntries(names.map(name => [name, 'Integração pendente']))
-);
-
+renderExchanges({});
 refresh();
-setInterval(refresh, 10000);
+setInterval(refresh,10000);
