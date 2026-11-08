@@ -1,13 +1,12 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>USDT Radar Pro</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
   <aside id="sidebar">
     <h2>🟢 USDT RADAR PRO</h2>
@@ -22,12 +21,12 @@
 
   <main>
     <header>
-      <button id="menu" type="button">☰</button>
+      <button id="menu">☰</button>
       <div>
         <h1>USDT Radar Pro</h1>
-        <p>Radar de arbitragem · atualização automática a cada 10 segundos</p>
+        <p>Radar de arbitragem · atualização a cada 10 segundos</p>
       </div>
-      <button id="refresh" type="button">↻ Atualizar</button>
+      <button id="refresh">↻ Atualizar</button>
     </header>
 
     <section class="hero" id="overview">
@@ -39,23 +38,14 @@
       </div>
       <label>
         Capital (R$)
-        <input id="capital" type="number" value="1000" min="1">
+        <input id="capital" type="number" value="1000" min="0">
       </label>
     </section>
 
     <section class="stats">
-      <article>
-        Oportunidades positivas
-        <b id="count">0</b>
-      </article>
-      <article>
-        CEX respondendo
-        <b id="online">0 / 8</b>
-      </article>
-      <article>
-        Última atualização
-        <b id="updated">—</b>
-      </article>
+      <article>Oportunidades positivas<b id="count">0</b></article>
+      <article>CEX respondendo<b id="online">0 / 8</b></article>
+      <article>Última atualização<b id="updated">—</b></article>
     </section>
 
     <section class="panel" id="opportunities">
@@ -67,95 +57,64 @@
           <option>USDT/BRL1</option>
           <option>USDT/BRZ</option>
         </select>
-        <select id="min">
-          <option value="0">Spread acima de 0%</option>
-          <option value=".1">Acima de 0,10%</option>
-          <option value=".3">Acima de 0,30%</option>
-          <option value=".5">Acima de 0,50%</option>
+        <select id="resultFilter">
+          <option value="all">Positivos e negativos</option>
+          <option value="positive">Somente positivos</option>
+          <option value="negative">Somente negativos</option>
         </select>
       </div>
 
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Comprar em</th>
-              <th>Vender em</th>
-              <th>Par</th>
-              <th>ASK</th>
-              <th>BID</th>
-              <th>Spread bruto</th>
-              <th>Lucro bruto</th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr>
-              <td colspan="7">Aguardando cotações reais.</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="exchange-filters">
+        <label>Comprar em
+          <select id="buyFilter">
+            <option value="all">Todas as corretoras</option>
+          </select>
+        </label>
+        <label>Vender em
+          <select id="sellFilter">
+            <option value="all">Todas as corretoras</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="rows" class="opportunity-list">
+        Aguardando cotações reais...
       </div>
     </section>
 
-    <!-- CORRETORAS CENTRALIZADAS -->
     <section class="panel" id="cex">
       <h2>Corretoras centralizadas (CEX)</h2>
       <p>Exchanges centralizadas · cotações e integrações</p>
       <div id="exchanges" class="exchanges"></div>
     </section>
 
-    <!-- CORRETORAS DESCENTRALIZADAS -->
     <section class="panel" id="dex">
       <h2>Corretoras descentralizadas (DEX)</h2>
       <p>Agregadores e exchanges descentralizadas · integrações em preparação</p>
-
       <div id="dexExchanges" class="exchanges">
-        <div class="source">
-          <strong>LlamaSwap</strong>
-          <span class="neutral">Integração pendente</span>
-          <small>Liquidez descentralizada</small>
-        </div>
-
-        <div class="source">
-          <strong>Uniswap</strong>
-          <span class="neutral">Integração pendente</span>
-          <small>DEX · múltiplas redes</small>
-        </div>
-
-        <div class="source">
-          <strong>Oku Trade</strong>
-          <span class="neutral">Integração pendente</span>
-          <small>Agregador de liquidez</small>
-        </div>
+        <div class="source"><strong>LlamaSwap</strong><span>Integração pendente</span><small>Liquidez descentralizada</small></div>
+        <div class="source"><strong>Uniswap</strong><span>Integração pendente</span><small>DEX · múltiplas redes</small></div>
+        <div class="source"><strong>Oku Trade</strong><span>Integração pendente</span><small>Agregador de liquidez</small></div>
       </div>
     </section>
 
-    <!-- CUSTOS -->
     <section class="panel" id="settings">
       <h2>Configuração das taxas</h2>
-
-      <label>
+      <label class="check">
         <input id="includeCosts" type="checkbox">
         Considerar taxas e custos no cálculo
       </label>
-
       <p>Deixe desmarcado para visualizar somente o lucro bruto.</p>
-
-      <label>
-        Custo total da operação (R$)
-        <input id="cost" type="number" min="0" step="0.01"
-          value="0" disabled>
+      <label>Custo total da operação (R$)
+        <input id="cost" type="number" min="0" step="0.01" value="0" disabled>
       </label>
-
-      <p>Lucro líquido estimado: <b id="net">Desativado</b></p>
-      <small>O lucro bruto continuará sendo exibido independentemente dessa opção.</small>
+      <p>Resultado líquido estimado: <b id="net">Desativado</b></p>
+      <small>O resultado bruto continuará sendo exibido.</small>
     </section>
 
     <section class="panel">
       <h2>Histórico de spreads</h2>
-      <div id="history">
-        O histórico será preenchido quando houver oportunidades reais.
-      </div>
+      <div id="history">Aguardando oportunidades reais.</div>
     </section>
 
     <footer>
