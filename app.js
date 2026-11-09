@@ -66,6 +66,13 @@ function priceBRL(value) {
   });
 }
 
+function formatUSDT(value) {
+  return Number(value).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  }) + ' USDT';
+}
+
 function safe(value) {
   return String(value).replace(/[&<>"']/g, c => ({
     '&': '&amp;',
@@ -113,16 +120,11 @@ function renderExchanges(statuses) {
 }
 
 /*
-  COMPARAÇÃO AUTOMÁTICA DOS DOIS SENTIDOS
+  GERA TODAS AS COMBINAÇÕES DIRECIONAIS.
 
-  Para cada par de corretoras:
-  1. Compra na corretora com menor ASK.
-  2. Venda na corretora com maior BID.
-  3. Calcula o spread real entre esses preços.
-  4. Descarta qualquer resultado negativo ou zerado.
-
-  O próprio cruzamento de todas as corretoras
-  avalia automaticamente as duas direções.
+  Não descarta spreads negativos aqui.
+  A decisão de mostrar ou ocultar resultados
+  é feita posteriormente pelos filtros.
 */
 
 function calculateOpportunities(quotes) {
@@ -148,7 +150,7 @@ function calculateOpportunities(quotes) {
 
       const spread = ((bid - ask) / ask) * 100;
 
-      if (!Number.isFinite(spread) || spread <= 0) continue;
+      if (!Number.isFinite(spread)) continue;
 
       results.push({
         buyExchange: buy.exchange,
@@ -180,6 +182,11 @@ function exchangeButton(name) {
 
 function createMainCard(item, capital) {
   const gross = capital * item.spread / 100;
+  const quantity = capital > 0 ? capital / item.ask : 0;
+
+  const isPositive = item.spread > 0;
+  const resultClass = isPositive ? 'positive' : 'negative';
+  const sign = isPositive ? '+' : '';
 
   return `
     <article class="opportunity-card">
@@ -202,14 +209,18 @@ function createMainCard(item, capital) {
       <div class="opportunity-details">
         <span>Par: <b>${safe(item.pair)}</b></span>
 
+        <span>Quantidade estimada:
+          <b>${formatUSDT(quantity)}</b>
+        </span>
+
         <span>Spread:
-          <b class="positive">
-            +${item.spread.toFixed(3)}%
+          <b class="${resultClass}">
+            ${sign}${item.spread.toFixed(3)}%
           </b>
         </span>
 
-        <span>Lucro bruto estimado:
-          <b class="positive">${money(gross)}</b>
+        <span>Resultado bruto estimado:
+          <b class="${resultClass}">${money(gross)}</b>
         </span>
       </div>
 
@@ -235,12 +246,15 @@ function renderOtherOpportunities(items, capital) {
 
   if (!items.length) {
     list.innerHTML =
-      '<p class="empty-results">Nenhuma outra oportunidade positiva neste momento.</p>';
+      '<p class="empty-results">Nenhuma outra combinação encontrada.</p>';
     return;
   }
 
   list.innerHTML = items.map(item => {
     const gross = capital * item.spread / 100;
+    const isPositive = item.spread > 0;
+    const resultClass = isPositive ? 'positive' : 'negative';
+    const sign = isPositive ? '+' : '';
 
     return `
       <div style="
@@ -256,11 +270,11 @@ function renderOtherOpportunities(items, capital) {
 
         <span>${safe(item.pair)}</span>
 
-        <span class="positive" style="font-weight:700">
-          +${item.spread.toFixed(3)}%
+        <span class="${resultClass}" style="font-weight:700">
+          ${sign}${item.spread.toFixed(3)}%
         </span>
 
-        <span class="positive">${money(gross)}</span>
+        <span class="${resultClass}">${money(gross)}</span>
 
         <span style="display:flex;gap:7px;flex-wrap:wrap">
           ${exchangeButton(item.buyExchange)}
@@ -528,7 +542,7 @@ function playTone() {
   });
 }
 
-/* REGRA ESPECIAL DA MEXC */
+/* REGRA ESPECIAL DA MEXC PARA ALERTAS */
 
 function getAlertThreshold(item, configuredThreshold) {
   const involvesMexc =
@@ -600,6 +614,9 @@ function renderOpportunities() {
   const buy = $('buyFilter').value;
   const sell = $('sellFilter').value;
 
+  const hasManualFilter =
+    buy !== 'all' || sell !== 'all';
+
   const selected = latestOpportunities.filter(item => {
     if (buy !== 'all' && item.buyExchange !== buy) return false;
     if (sell !== 'all' && item.sellExchange !== sell) return false;
@@ -607,15 +624,21 @@ function renderOpportunities() {
     return true;
   });
 
-  // O radar trabalha exclusivamente com oportunidades positivas.
-  const filtered = selected.filter(item => item.spread > 0);
+  /*
+    Sem filtros: somente spreads positivos.
+    Com pelo menos um filtro: mostra positivos e negativos.
+  */
 
-  $('count').textContent =
-    latestOpportunities.filter(item => item.spread > 0).length;
+  const filtered = hasManualFilter
+    ? selected
+    : selected.filter(item => item.spread > 0);
+
+  $('count').textContent = filtered.length;
 
   if (!filtered.length) {
-    $('rows').innerHTML =
-      '<p class="empty-results">Nenhuma oportunidade positiva disponível para os filtros selecionados.</p>';
+    $('rows').innerHTML = hasManualFilter
+      ? '<p class="empty-results">Nenhuma cotação válida encontrada para essa combinação de corretoras.</p>'
+      : '<p class="empty-results">Nenhuma oportunidade positiva disponível neste momento.</p>';
 
     renderOtherOpportunities([], capital);
 
@@ -623,10 +646,14 @@ function renderOpportunities() {
     $('best').className = 'neutral';
 
     $('profit').textContent =
-      'Aguardando oportunidade positiva';
+      hasManualFilter
+        ? 'Aguardando cotações das corretoras selecionadas'
+        : 'Aguardando oportunidade positiva';
 
     $('route').textContent =
-      'Nenhuma combinação positiva disponível';
+      hasManualFilter
+        ? 'Nenhuma combinação encontrada'
+        : 'Nenhuma combinação positiva disponível';
 
     $('net').textContent =
       $('includeCosts').checked ? '—' : 'Desativado';
@@ -642,14 +669,17 @@ function renderOpportunities() {
   renderOtherOpportunities(others, capital);
 
   const gross = capital * best.spread / 100;
+  const isPositive = best.spread > 0;
+  const resultClass = isPositive ? 'positive' : 'negative';
+  const sign = isPositive ? '+' : '';
 
   $('best').textContent =
-    '+' + best.spread.toFixed(3) + '%';
+    sign + best.spread.toFixed(3) + '%';
 
-  $('best').className = 'positive';
+  $('best').className = resultClass;
 
   $('profit').textContent =
-    'Lucro bruto estimado: ' + money(gross);
+    'Resultado bruto estimado: ' + money(gross);
 
   $('route').textContent =
     best.buyExchange + ' → ' + best.sellExchange;
@@ -667,7 +697,7 @@ function renderOpportunities() {
     new Date().toLocaleTimeString('pt-BR') +
     ' · ' + best.buyExchange +
     ' → ' + best.sellExchange +
-    ' · +' + best.spread.toFixed(3) + '%';
+    ' · ' + sign + best.spread.toFixed(3) + '%';
 }
 
 /* CONSULTA DA API */
@@ -692,8 +722,6 @@ async function refresh() {
     const statuses = data.statuses || {};
     const quotes = data.quotes || [];
 
-    // Utiliza somente as cotações recebidas do servidor.
-    // Não faz uma segunda consulta direta à Binance.
     renderExchanges(statuses);
 
     const onlineCount = Object.values(statuses)
