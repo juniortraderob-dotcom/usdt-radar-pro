@@ -18,6 +18,7 @@ const tradeUrls = {
 };
 
 let latestOpportunities = [];
+let latestStatuses = {};
 let audioContext = null;
 let soundUnlocked = false;
 let lastPositiveAlertKey = '';
@@ -122,9 +123,8 @@ function renderExchanges(statuses) {
 /*
   GERA TODAS AS COMBINAÇÕES DIRECIONAIS.
 
-  Não descarta spreads negativos aqui.
-  A decisão de mostrar ou ocultar resultados
-  é feita posteriormente pelos filtros.
+  Não elimina spreads negativos.
+  Cada direção é calculada com seu próprio ASK e BID.
 */
 
 function calculateOpportunities(quotes) {
@@ -234,15 +234,10 @@ function createMainCard(item, capital) {
 
 /* OUTRAS OPORTUNIDADES */
 
-function ensureSecondarySection() {
-  return $('otherOpportunities');
-}
-
 function renderOtherOpportunities(items, capital) {
-  const section = ensureSecondarySection();
   const list = $('otherOpportunityList');
 
-  if (!section || !list) return;
+  if (!list) return;
 
   if (!items.length) {
     list.innerHTML =
@@ -603,6 +598,30 @@ function checkSoundAlerts(opportunities) {
   }
 }
 
+/* MENSAGEM QUANDO NÃO HÁ COTAÇÃO */
+
+function getNoQuoteMessage(buy, sell) {
+  const selectedExchanges = [];
+
+  if (buy !== 'all') selectedExchanges.push(buy);
+  if (sell !== 'all') selectedExchanges.push(sell);
+
+  const unavailable = selectedExchanges.filter(name =>
+    latestStatuses[name] &&
+    latestStatuses[name] !== 'Online'
+  );
+
+  if (unavailable.length) {
+    const details = unavailable.map(name =>
+      `${name}: ${latestStatuses[name]}`
+    );
+
+    return 'Sem cotação para a seleção. ' + details.join(' | ');
+  }
+
+  return 'Nenhuma cotação válida encontrada para essa combinação de corretoras.';
+}
+
 /* RENDERIZAÇÃO DAS OPORTUNIDADES */
 
 function renderOpportunities() {
@@ -617,6 +636,25 @@ function renderOpportunities() {
   const hasManualFilter =
     buy !== 'all' || sell !== 'all';
 
+  /*
+    FILTROS:
+
+    1. Sem filtros:
+       Exibe somente spreads positivos.
+
+    2. Somente comprar selecionado:
+       Exibe todas as vendas possíveis daquela corretora,
+       inclusive spreads negativos.
+
+    3. Somente vender selecionado:
+       Exibe todas as compras possíveis para aquela corretora,
+       inclusive spreads negativos.
+
+    4. Os dois selecionados:
+       Exibe exclusivamente a direção escolhida,
+       mesmo que o spread seja negativo.
+  */
+
   const selected = latestOpportunities.filter(item => {
     if (buy !== 'all' && item.buyExchange !== buy) return false;
     if (sell !== 'all' && item.sellExchange !== sell) return false;
@@ -624,21 +662,24 @@ function renderOpportunities() {
     return true;
   });
 
-  /*
-    Sem filtros: somente spreads positivos.
-    Com pelo menos um filtro: mostra positivos e negativos.
-  */
-
   const filtered = hasManualFilter
     ? selected
     : selected.filter(item => item.spread > 0);
 
-  $('count').textContent = filtered.length;
+  // O contador representa apenas oportunidades positivas.
+  $('count').textContent =
+    filtered.filter(item => item.spread > 0).length;
 
   if (!filtered.length) {
-    $('rows').innerHTML = hasManualFilter
-      ? '<p class="empty-results">Nenhuma cotação válida encontrada para essa combinação de corretoras.</p>'
-      : '<p class="empty-results">Nenhuma oportunidade positiva disponível neste momento.</p>';
+    $('rows').innerHTML = `
+      <p class="empty-results">
+        ${safe(
+          hasManualFilter
+            ? getNoQuoteMessage(buy, sell)
+            : 'Nenhuma oportunidade positiva disponível neste momento.'
+        )}
+      </p>
+    `;
 
     renderOtherOpportunities([], capital);
 
@@ -652,7 +693,7 @@ function renderOpportunities() {
 
     $('route').textContent =
       hasManualFilter
-        ? 'Nenhuma combinação encontrada'
+        ? 'Nenhuma combinação disponível'
         : 'Nenhuma combinação positiva disponível';
 
     $('net').textContent =
@@ -719,12 +760,12 @@ async function refresh() {
 
     const data = await response.json();
 
-    const statuses = data.statuses || {};
+    latestStatuses = data.statuses || {};
     const quotes = data.quotes || [];
 
-    renderExchanges(statuses);
+    renderExchanges(latestStatuses);
 
-    const onlineCount = Object.values(statuses)
+    const onlineCount = Object.values(latestStatuses)
       .filter(status => status === 'Online').length;
 
     $('online').textContent =
