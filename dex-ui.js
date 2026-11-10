@@ -3,7 +3,6 @@
 
   const DEX = 'LlamaSwap';
   // Calibração inicial baseada nos prints enviados.
-  // Recalibrar se a diferença entre as fontes mudar.
   const DEX_PRICE_CORRECTION = 1.001536;
 
   const CEX = [
@@ -20,39 +19,50 @@
   let busy = false;
 
   const money = n => Number(n).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    style: 'currency', currency: 'BRL',
+    minimumFractionDigits: 2, maximumFractionDigits: 2
   });
 
   const price = n => Number(n).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4
+    style: 'currency', currency: 'BRL',
+    minimumFractionDigits: 4, maximumFractionDigits: 4
   });
 
   const quantity = n => Number(n).toLocaleString('pt-BR', {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4
+    minimumFractionDigits: 4, maximumFractionDigits: 4
   });
 
   const safe = s => String(s).replace(/[&<>"']/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
+    '&': '&amp;', '<': '&lt;', '>': '&gt;',
+    '"': '&quot;', "'": '&#39;'
   })[c]);
 
   const capital = () => Math.max(0, Number($('capital')?.value) || 0);
+
+  // Restringe os filtros: CEX à esquerda e somente LlamaSwap à direita.
+  function configureFilters() {
+    const buyFilter = $('dexBuyFilter');
+    const sellFilter = $('dexSellFilter');
+
+    if (buyFilter) {
+      const selected = CEX.includes(buyFilter.value) ? buyFilter.value : 'all';
+      buyFilter.innerHTML =
+        '<option value="all">Todas as corretoras CEX</option>' +
+        CEX.map(name => `<option value="${safe(name)}">${safe(name)}</option>`).join('');
+      buyFilter.value = selected;
+    }
+
+    if (sellFilter) {
+      sellFilter.innerHTML = `<option value="${DEX}">${DEX}</option>`;
+      sellFilter.value = DEX;
+      sellFilter.disabled = true;
+    }
+  }
 
   function calculate(quotes, data) {
     const d = data?.directions;
     if (!d) return [];
 
-    // Preço unitário de venda de USDT na DEX (token recebido por USDT).
     const rawDexPrice = d.usdtToToken?.status === 'OK'
       ? Number(d.usdtToToken.buyAmount) / Number(d.usdtToToken.sellAmount)
       : 0;
@@ -68,14 +78,11 @@
       const ask = Number(q.ask);
       if (!(ask > 0) || !Number.isFinite(ask)) continue;
 
-      // Compra na CEX e venda na LlamaSwap.
       out.push({
         buy: q.exchange,
         sell: DEX,
         buyPrice: ask,
         sellPrice: dexSellPrice,
-        rawDexPrice,
-        correction: DEX_PRICE_CORRECTION,
         spread: (dexSellPrice - ask) / ask * 100,
         route: 'CEX → LlamaSwap'
       });
@@ -89,16 +96,7 @@
     if (!box) return;
 
     const bf = $('dexBuyFilter')?.value || 'all';
-    const sf = $('dexSellFilter')?.value || 'all';
-
-    let rows = opportunities.filter(x =>
-      (bf === 'all' || x.buy === bf) &&
-      (sf === 'all' || x.sell === sf)
-    );
-
-    if (bf === 'all' && sf === 'all') {
-      rows = rows.filter(x => x.spread > 0);
-    }
+    const rows = opportunities.filter(x => bf === 'all' || x.buy === bf);
 
     if (!rows.length) {
       box.innerHTML = '<p class="empty-results">Nenhuma oportunidade positiva disponível.</p>';
@@ -113,7 +111,6 @@
 
     const cap = capital();
     const best = rows[0];
-    const estimatedUsdt = cap > 0 ? cap / best.buyPrice : 0;
     const gain = cap * best.spread / 100;
     const cls = best.spread > 0 ? 'positive' : 'negative';
     const sign = best.spread > 0 ? '+' : '';
@@ -138,27 +135,18 @@
               <strong>${safe(x.buy)}</strong>
               <span>Preço: ${price(x.buyPrice)}</span>
             </div>
-
             <div class="exchange-arrow">→</div>
-
             <div class="exchange-side sell-side">
               <small>VENDER USDT</small>
               <strong>${DEX}</strong>
               <span>Preço: ${price(x.sellPrice)}</span>
             </div>
           </div>
-
           <div class="opportunity-details">
             <span>Rota: <b>CEX → LlamaSwap</b></span>
             <span>Quantidade estimada: <b>${quantity(estimated)} USDT</b></span>
-            <span>
-              Spread:
-              <b class="${c}">${x.spread > 0 ? '+' : ''}${x.spread.toFixed(3)}%</b>
-            </span>
-            <span>
-              Lucro bruto estimado:
-              <b class="${c}">${money(g)}</b>
-            </span>
+            <span>Spread: <b class="${c}">${x.spread > 0 ? '+' : ''}${x.spread.toFixed(3)}%</b></span>
+            <span>Lucro bruto estimado: <b class="${c}">${money(g)}</b></span>
           </div>
         </article>
       `;
@@ -168,13 +156,12 @@
   async function refresh() {
     if (busy) return;
     busy = true;
-
     const status = $('dexStatus');
 
     try {
       if (status) status.textContent = 'Consultando preços...';
 
-      const pair = $('dexPair').value;
+      const pair = $('dexPair')?.value || 'USDT/BRLA';
       const cap = capital();
 
       const cr = await fetch('/api/markets?pair=USDT%2FBRL', { cache: 'no-store' });
@@ -183,9 +170,8 @@
       const cd = await cr.json();
       const quotes = cd.quotes || [];
       const validQuotes = quotes.filter(q =>
-        Number(q.ask) > 0 && Number(q.bid) > 0
+        CEX.includes(q.exchange) && Number(q.ask) > 0 && Number(q.bid) > 0
       );
-
       if (!validQuotes.length) throw Error('Nenhuma cotação CEX válida.');
 
       const avg = validQuotes.reduce((sum, q) =>
@@ -228,15 +214,10 @@
   function init() {
     if (!$('dexRows')) return;
 
+    configureFilters();
     $('dexPair')?.addEventListener('change', refresh);
     $('dexBuyFilter')?.addEventListener('change', render);
-    $('dexSellFilter')?.addEventListener('change', render);
     $('capital')?.addEventListener('input', render);
-
-    const sellFilter = $('dexSellFilter');
-    if (sellFilter && [...sellFilter.options].some(o => o.value === DEX)) {
-      sellFilter.value = DEX;
-    }
 
     refresh();
     setInterval(refresh, 20000);
