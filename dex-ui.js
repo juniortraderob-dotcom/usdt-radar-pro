@@ -2,21 +2,14 @@
   const $ = id => document.getElementById(id);
 
   const DEX = 'LlamaSwap';
-  // Calibração inicial baseada nos prints enviados.
   const DEX_PRICE_CORRECTION = 1.001536;
 
-  const CEX = [
-    'Binance',
-    'OKX',
-    'Bybit',
-    'Bitget',
-    'MEXC',
-    'KuCoin',
-    'Foxbit'
-  ];
+  const CEX = ['Binance', 'OKX', 'Bybit', 'Bitget', 'MEXC', 'KuCoin', 'Foxbit'];
 
   let opportunities = [];
   let busy = false;
+  // Guarda as rotas que já estão negativas para evitar alertas repetidos a cada 20s.
+  let lastNegativeDexAlerts = new Set();
 
   const money = n => Number(n).toLocaleString('pt-BR', {
     style: 'currency', currency: 'BRL',
@@ -39,7 +32,6 @@
 
   const capital = () => Math.max(0, Number($('capital')?.value) || 0);
 
-  // Restringe os filtros: CEX à esquerda e somente LlamaSwap à direita.
   function configureFilters() {
     const buyFilter = $('dexBuyFilter');
     const sellFilter = $('dexSellFilter');
@@ -89,6 +81,63 @@
     }
 
     return out.sort((x, y) => y.spread - x.spread);
+  }
+
+  // ALERTA NEGATIVO EXCLUSIVO DO DEX.
+  // Reaproveita sendTelegramAlert() já definido no app.js.
+  async function checkNegativeDexAlerts(items) {
+    const negative = items.filter(x => x.spread < 0);
+    const currentKeys = new Set(
+      negative.map(x => `${x.buy}|${x.sell}`)
+    );
+
+    const newlyNegative = negative.filter(x =>
+      !lastNegativeDexAlerts.has(`${x.buy}|${x.sell}`)
+    );
+
+    // Atualiza a memória quando as rotas deixam de estar negativas.
+    if (!newlyNegative.length) {
+      lastNegativeDexAlerts = currentKeys;
+      return;
+    }
+
+    if (typeof window.sendTelegramAlert !== 'function') {
+      console.warn('Telegram não disponível: sendTelegramAlert() não foi encontrado no app.js.');
+      return;
+    }
+
+    const cap = capital();
+    const lines = newlyNegative.map(x => {
+      const estimatedUsdt = cap > 0 ? cap / x.buyPrice : 0;
+      const estimatedLoss = Math.abs(cap * x.spread / 100);
+
+      return [
+        `🔻 ${x.buy} → ${DEX}`,
+        `Compra CEX: ${price(x.buyPrice)}`,
+        `Venda DEX: ${price(x.sellPrice)}`,
+        `Spread negativo: ${x.spread.toFixed(3)}%`,
+        `Quantidade estimada: ${quantity(estimatedUsdt)} USDT`,
+        `Prejuízo bruto estimado: ${money(estimatedLoss)}`
+      ].join('\n');
+    });
+
+    const message =
+      `⚠️ ALERTA DEX — SPREAD NEGATIVO\n` +
+      `Par: ${$('dexPair')?.value || 'USDT/BRLA'}\n` +
+      `Capital considerado: ${money(cap)}\n\n` +
+      lines.join('\n\n') +
+      `\n\nCotação indicativa. Não é ordem de operação.`;
+
+    try {
+      const sent = await window.sendTelegramAlert(message);
+      if (sent) {
+        lastNegativeDexAlerts = currentKeys;
+      } else {
+        console.error('O Telegram não confirmou o envio do alerta negativo DEX.');
+      }
+    } catch (error) {
+      console.error('Falha no alerta negativo DEX:', error);
+    }
   }
 
   function render() {
@@ -194,6 +243,10 @@
       if (!dd.directions) throw Error(dd.error || 'Resposta DEX inválida.');
 
       opportunities = calculate(validQuotes, dd);
+
+      // Somente este módulo dispara alertas negativos no Telegram.
+      await checkNegativeDexAlerts(opportunities);
+
       render();
 
       if (status) {
@@ -215,7 +268,10 @@
     if (!$('dexRows')) return;
 
     configureFilters();
-    $('dexPair')?.addEventListener('change', refresh);
+    $('dexPair')?.addEventListener('change', () => {
+      lastNegativeDexAlerts = new Set();
+      refresh();
+    });
     $('dexBuyFilter')?.addEventListener('change', render);
     $('capital')?.addEventListener('input', render);
 
