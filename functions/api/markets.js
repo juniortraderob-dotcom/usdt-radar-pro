@@ -53,24 +53,53 @@ function makeQuote(exchange, bids, asks) {
 }
 
 async function getBinanceQuote() {
+  // Endpoints oficiais alternativos da Binance para dados públicos.
   const hosts = [
-    'https://api1.binance.com',
     'https://data-api.binance.vision',
-    'https://api.binance.com'
+    'https://api-gcp.binance.com',
+    'https://api1.binance.com',
+    'https://api2.binance.com'
   ];
 
   let lastError;
 
+  // Primeiro tenta obter o livro de ofertas.
   for (const host of hosts) {
     try {
       const book = await fetchJson(
         `${host}/api/v3/depth?symbol=USDTBRL&limit=5`
       );
-
       return makeQuote('Binance', book.bids, book.asks);
     } catch (error) {
       lastError = error;
     }
+  }
+
+  // Alternativa oficial: melhor compra e venda, sem profundidade do livro.
+  for (const host of [
+    'https://data-api.binance.vision',
+    'https://api-gcp.binance.com'
+  ]) {
+    try {
+      const ticker = await fetchJson(
+        `${host}/api/v3/ticker/bookTicker?symbol=USDTBRL`
+      );
+
+      return makeQuote(
+        'Binance',
+        [[ticker.bidPrice, ticker.bidQty]],
+        [[ticker.askPrice, ticker.askQty]]
+      );
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const message = String(lastError?.message || 'Binance indisponível');
+  if (message.includes('HTTP 403')) {
+    throw new Error(
+      'HTTP 403: Binance bloqueou o acesso do servidor Cloudflare (WAF/região)'
+    );
   }
 
   throw lastError || new Error('Binance indisponível');
