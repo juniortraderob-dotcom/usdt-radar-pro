@@ -7,9 +7,12 @@
 <title>USDT Radar Pro</title>
 <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
+
 <aside id="sidebar">
   <h2>🟢 USDT RADAR PRO</h2>
+
   <nav>
     <a href="#overview">Visão geral</a>
     <a href="#opportunities">Oportunidades CEX</a>
@@ -22,48 +25,81 @@
 </aside>
 
 <main>
+
 <header>
   <button id="menu">☰</button>
+
   <div class="header-title">
     <h1>USDT Radar Pro</h1>
     <p>Radar de arbitragem · atualização automática a cada 20 segundos</p>
   </div>
+
   <div class="header-actions">
-    <span class="updated-label">Última atualização: <span id="updated">—</span></span>
+    <span class="updated-label">
+      Última atualização:
+      <span id="updated">—</span>
+    </span>
+
     <button id="refresh">↻ Atualizar</button>
   </div>
 </header>
 
+<!-- VISÃO GERAL -->
+
 <section class="overview-grid" id="overview">
+
   <div class="hero cex-summary">
+
     <div class="summary-content">
       <small>MELHOR SPREAD BRUTO CEX</small>
+
       <h2 id="best" class="neutral">—</h2>
+
       <b id="profit">Aguardando cotações reais</b>
+
       <p id="route">Nenhuma oportunidade confirmada</p>
     </div>
-    <label>Capital (R$)
-      <input id="capital" type="number" value="1000" min="0">
+
+    <label>
+      Capital (R$)
+      <input
+        id="capital"
+        type="number"
+        value="1000"
+        min="0"
+      >
     </label>
+
   </div>
 
   <div class="hero dex-summary">
+
     <div class="summary-content">
       <small>MELHOR SPREAD BRUTO DEX</small>
+
       <h2 id="dexBest" class="neutral">—</h2>
+
       <b id="dexProfit">Aguardando integração DEX</b>
-      <p id="dexRoute">DEX · Polygon</p>
+
+      <p id="dexRoute">LlamaSwap</p>
     </div>
+
     <div class="dex-summary-status">
       <span class="network-dot"></span>
       <span id="dexStatus">Aguardando consulta...</span>
     </div>
+
   </div>
+
 </section>
 
+<!-- OPORTUNIDADES CEX -->
+
 <section class="panel" id="opportunities">
+
   <div class="section-title">
     <h2>Oportunidades CEX</h2>
+
     <select id="pair">
       <option>USDT/BRL</option>
       <option>USDT/BRLA</option>
@@ -73,44 +109,65 @@
   </div>
 
   <div class="exchange-filters">
-    <label>Comprar em
+
+    <label>
+      Comprar em
       <select id="buyFilter">
         <option value="all">Todas as corretoras</option>
       </select>
     </label>
-    <label>Vender em
+
+    <label>
+      Vender em
       <select id="sellFilter">
         <option value="all">Todas as corretoras</option>
       </select>
     </label>
+
   </div>
 
   <div id="rows" class="opportunity-list">
     Aguardando cotações reais...
   </div>
+
 </section>
 
+<!-- OPORTUNIDADES DEX X CEX -->
+
 <section class="panel dex-opportunities" id="dexOpportunities">
+
   <div class="section-title">
+
     <div>
-      <h2>Oportunidades DEX x CEX</h2>
-      <p>Comparação indicativa entre agregador DEX e corretoras centralizadas</p>
+      <h2>Oportunidades LlamaSwap x CEX</h2>
+
+      <p>
+        Comparação indicativa entre LlamaSwap e corretoras centralizadas
+      </p>
     </div>
+
     <select id="dexPair">
       <option value="USDT/BRLA">USDT/BRLA</option>
       <option value="USDT/BRZ">USDT/BRZ</option>
     </select>
+
   </div>
 
   <div class="dex-network">
     <span class="network-dot"></span>
-    Rede monitorada: <strong>Polygon</strong>
+    Rede monitorada:
+    <strong>Polygon</strong>
   </div>
 
   <div class="exchange-filters">
-    <label>Comprar em
+
+    <label>
+      Comprar em
+
       <select id="dexBuyFilter">
+
         <option value="all">Todas as plataformas</option>
+
         <optgroup label="CEX">
           <option>Binance</option>
           <option>OKX</option>
@@ -120,13 +177,19 @@
           <option>KuCoin</option>
           <option>Foxbit</option>
         </optgroup>
-        <option value="DEX · 0x / Polygon">DEX · 0x / Polygon</option>
+
+        <option value="LlamaSwap">LlamaSwap</option>
+
       </select>
     </label>
 
-    <label>Vender em
+    <label>
+      Vender em
+
       <select id="dexSellFilter">
+
         <option value="all">Todas as plataformas</option>
+
         <optgroup label="CEX">
           <option>Binance</option>
           <option>OKX</option>
@@ -136,78 +199,168 @@
           <option>KuCoin</option>
           <option>Foxbit</option>
         </optgroup>
-        <option value="DEX · 0x / Polygon">DEX · 0x / Polygon</option>
+
+        <option value="LlamaSwap">LlamaSwap</option>
+
       </select>
     </label>
+
   </div>
 
   <div id="dexRows" class="opportunity-list">
-    <p class="empty-results">Aguardando cotações DEX e CEX...</p>
+    <p class="empty-results">
+      Aguardando cotações DEX e CEX...
+    </p>
   </div>
 
   <small>
     BRLA e BRZ são considerados em paridade indicativa de 1:1 com o real.
     Lucro bruto, sem desconto de taxas, impacto, liquidez ou transferências.
-    Cotações não executam swaps.
+    Cotações indicativas, não executam swaps.
   </small>
+
 </section>
+
+<!-- ESTATÍSTICAS -->
 
 <section class="stats">
-  <article>Oportunidades positivas<b id="count">0</b></article>
-  <article>CEX respondendo<b id="online">0 / 8</b></article>
+
+  <article>
+    Oportunidades positivas
+    <b id="count">0</b>
+  </article>
+
+  <article>
+    CEX respondendo
+    <b id="online">0 / 8</b>
+  </article>
+
 </section>
+
+<!-- CORRETORAS CEX -->
 
 <section class="panel" id="cex">
+
   <h2>Corretoras centralizadas (CEX)</h2>
-  <p>Exchanges centralizadas · cotações e integrações</p>
+
+  <p>
+    Exchanges centralizadas · cotações e integrações
+  </p>
+
   <div id="exchanges" class="exchanges"></div>
+
 </section>
+
+<!-- LLAMASWAP -->
 
 <section class="panel" id="dex">
-  <h2>Agregador descentralizado (DEX)</h2>
-  <p>Fonte de cotação: 0x Swap API · rede Polygon</p>
+
+  <h2>LlamaSwap</h2>
+
+  <p>
+    Agregador descentralizado · rede Polygon
+  </p>
+
   <div id="dexExchanges" class="exchanges">
+
     <div class="source">
-      <strong>0x / Polygon</strong>
+      <strong>LlamaSwap</strong>
+
       <span>Consulta de preços</span>
-      <small>Preços indicativos, sem execução de swap</small>
+
+      <small>
+        Cotações indicativas, sem execução de swap
+      </small>
     </div>
+
   </div>
+
 </section>
+
+<!-- CONFIGURAÇÃO DE CUSTOS -->
 
 <section class="panel" id="settings">
+
   <h2>Configuração das taxas</h2>
+
   <label class="check">
     <input id="includeCosts" type="checkbox">
+
     Considerar taxas e custos no cálculo
   </label>
-  <p>Deixe desmarcado para visualizar somente o lucro bruto.</p>
-  <label>Custo total da operação (R$)
-    <input id="cost" type="number" min="0" step="0.01" value="0" disabled>
+
+  <p>
+    Deixe desmarcado para visualizar somente o lucro bruto.
+  </p>
+
+  <label>
+    Custo total da operação (R$)
+
+    <input
+      id="cost"
+      type="number"
+      min="0"
+      step="0.01"
+      value="0"
+      disabled
+    >
   </label>
-  <p>Resultado líquido estimado: <b id="net">Desativado</b></p>
-  <small>O resultado bruto continuará sendo exibido.</small>
+
+  <p>
+    Resultado líquido estimado:
+    <b id="net">Desativado</b>
+  </p>
+
+  <small>
+    O resultado bruto continuará sendo exibido.
+  </small>
+
 </section>
+
+<!-- HISTÓRICO -->
 
 <section class="panel">
+
   <h2>Histórico de spreads</h2>
-  <div id="history">Aguardando oportunidades reais.</div>
+
+  <div id="history">
+    Aguardando oportunidades reais.
+  </div>
+
 </section>
 
-<section class="panel other-opportunities" id="otherOpportunities">
+<!-- OUTRAS OPORTUNIDADES -->
+
+<section
+  class="panel other-opportunities"
+  id="otherOpportunities"
+>
+
   <h2>Outras oportunidades</h2>
-  <p>Demais combinações disponíveis, em formato compacto.</p>
+
+  <p>
+    Demais combinações disponíveis, em formato compacto.
+  </p>
+
   <div id="otherOpportunityList">
-    <p class="empty-results">Aguardando outras oportunidades.</p>
+    <p class="empty-results">
+      Aguardando outras oportunidades.
+    </p>
   </div>
+
 </section>
 
 <footer>
-  Ferramenta informativa. Confira taxas, liquidez, redes, limites e custos antes de operar.
+  Ferramenta informativa. Confira taxas, liquidez, redes,
+  limites e custos antes de operar.
 </footer>
+
 </main>
+
+<!-- SCRIPTS -->
 
 <script src="app.js"></script>
 <script src="dex-ui.js"></script>
+
 </body>
 </html>
