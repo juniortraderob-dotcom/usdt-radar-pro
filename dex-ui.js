@@ -1,7 +1,8 @@
 
 (() => {
   const $ = id => document.getElementById(id);
-  const DEX = 'DEX · 0x / Polygon';
+
+  const DEX = 'LlamaSwap';
 
   const CEX = [
     'Binance',
@@ -46,13 +47,13 @@
 
     if (!d) return [];
 
-    // Preço para comprar USDT na DEX usando BRLA ou BRZ
+    // Preço para comprar USDT na DEX
     const a = d.tokenToUsdt?.status === 'OK'
       ? Number(d.tokenToUsdt.sellAmount) /
         Number(d.tokenToUsdt.buyAmount)
       : 0;
 
-    // Preço para vender USDT na DEX e receber BRLA ou BRZ
+    // Preço para vender USDT na DEX
     const b = d.usdtToToken?.status === 'OK'
       ? Number(d.usdtToToken.buyAmount) /
         Number(d.usdtToToken.sellAmount)
@@ -77,24 +78,24 @@
 
       if (!(ask > 0) || !(bid > 0)) continue;
 
-      // Comprar USDT na CEX e vender na DEX
+      // Comprar na CEX e vender na LlamaSwap
       out.push({
         buy: q.exchange,
         sell: DEX,
         buyPrice: ask,
         sellPrice: b,
         spread: (b - ask) / ask * 100,
-        route: 'CEX → DEX'
+        route: 'CEX → LlamaSwap'
       });
 
-      // Comprar USDT na DEX e vender na CEX
+      // Comprar na LlamaSwap e vender na CEX
       out.push({
         buy: DEX,
         sell: q.exchange,
         buyPrice: a,
         sellPrice: bid,
         spread: (bid - a) / a * 100,
-        route: 'DEX → CEX'
+        route: 'LlamaSwap → CEX'
       });
     }
 
@@ -114,13 +115,14 @@
       (sf === 'all' || x.sell === sf)
     );
 
+    // Exibe somente spreads positivos na visualização geral
     if (bf === 'all' && sf === 'all') {
       rows = rows.filter(x => x.spread > 0);
     }
 
     if (!rows.length) {
       box.innerHTML =
-        '<p class="empty-results">Nenhuma oportunidade disponível para essa combinação.</p>';
+        '<p class="empty-results">Nenhuma oportunidade positiva disponível.</p>';
 
       $('dexBest').textContent = '—';
       $('dexBest').className = 'neutral';
@@ -174,7 +176,10 @@
           </div>
 
           <div class="opportunity-details">
-            <span>Rota: <b>${x.route}</b></span>
+
+            <span>
+              Rota: <b>${x.route}</b>
+            </span>
 
             <span>
               Spread:
@@ -187,6 +192,7 @@
               Lucro bruto estimado:
               <b class="${c}">${money(g)}</b>
             </span>
+
           </div>
 
         </article>
@@ -221,51 +227,65 @@
       const quotes = cd.quotes || [];
 
       if (!quotes.length) {
-        throw Error('Sem cotações CEX de USDT/BRL.');
+        throw Error('Sem cotações CEX disponíveis.');
       }
 
-      const avg = quotes.reduce(
+      const validQuotes = quotes.filter(q =>
+        Number(q.ask) > 0 && Number(q.bid) > 0
+      );
+
+      if (!validQuotes.length) {
+        throw Error('Nenhuma cotação CEX válida.');
+      }
+
+      const avg = validQuotes.reduce(
         (s, q) => s + (
           Number(q.ask) + Number(q.bid)
         ) / 2,
         0
-      ) / quotes.length;
+      ) / validQuotes.length;
 
-      // Consulta a DEX
+      // Calcula a quantidade de USDT com exatamente 6 casas
+      const reverseAmount =
+        cap > 0 && avg > 0
+          ? (cap / avg).toFixed(6)
+          : '1.000000';
+
       const params = new URLSearchParams({
         pair,
-        capital: String(cap || 1),
-        reverseCapital: String(
-          cap > 0 && avg > 0 ? cap / avg : 1
-        )
+        capital: String(cap > 0 ? cap : 1),
+        reverseCapital: reverseAmount
       });
 
+      // Consulta a fonte DEX configurada no backend
       const dr = await fetch(
-        '/api/dex?' + params,
+        '/api/dex?' + params.toString(),
         { cache: 'no-store' }
       );
 
-      if (!dr.ok) {
-        throw Error('Erro na consulta DEX: HTTP ' + dr.status);
-      }
-
       const dd = await dr.json();
+
+      if (!dr.ok) {
+        throw Error(
+          dd.error || 'Erro na consulta DEX: HTTP ' + dr.status
+        );
+      }
 
       if (!dd.directions) {
         throw Error(dd.error || 'Resposta DEX inválida.');
       }
 
-      opportunities = calculate(quotes, dd);
+      opportunities = calculate(validQuotes, dd);
 
       render();
 
       status.textContent =
         dd.status === 'OK'
-          ? 'Cotação recebida · 0x / Polygon'
+          ? 'Cotação recebida · Polygon'
           : 'Cotação parcial · confira as direções';
 
     } catch (e) {
-      console.error('DEX:', e);
+      console.error('Erro DEX:', e);
 
       opportunities = [];
       render();
@@ -281,11 +301,8 @@
     if (!$('dexRows')) return;
 
     $('dexPair').addEventListener('change', refresh);
-
     $('dexBuyFilter').addEventListener('change', render);
-
     $('dexSellFilter').addEventListener('change', render);
-
     $('capital').addEventListener('input', render);
 
     refresh();
