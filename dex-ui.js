@@ -145,7 +145,8 @@
     if (!box) return;
 
     const bf = $('dexBuyFilter')?.value || 'all';
-    const rows = opportunities.filter(x => bf === 'all' || x.buy === bf);
+    const filteredRows = opportunities.filter(x => bf === 'all' || x.buy === bf);
+const rows = filteredRows.length ? [filteredRows[0]] : [];
 
     if (!rows.length) {
       box.innerHTML = '<p class="empty-results">Nenhuma oportunidade positiva disponível.</p>';
