@@ -2,8 +2,7 @@
   const $ = id => document.getElementById(id);
 
   const DEX = 'LlamaSwap';
-  // Ajuste calculado a partir dos prints enviados:
-  // 5,6075 / 5,5989 = aproximadamente 1,001536.
+  // Calibração inicial baseada nos prints enviados.
   // Recalibrar se a diferença entre as fontes mudar.
   const DEX_PRICE_CORRECTION = 1.001536;
 
@@ -34,6 +33,11 @@
     maximumFractionDigits: 4
   });
 
+  const quantity = n => Number(n).toLocaleString('pt-BR', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
+  });
+
   const safe = s => String(s).replace(/[&<>"']/g, c => ({
     '&': '&amp;',
     '<': '&lt;',
@@ -42,28 +46,20 @@
     "'": '&#39;'
   })[c]);
 
-  const capital = () =>
-    Math.max(0, Number($('capital')?.value) || 0);
+  const capital = () => Math.max(0, Number($('capital')?.value) || 0);
 
   function calculate(quotes, data) {
     const d = data?.directions;
     if (!d) return [];
 
-    // Cotação de venda de USDT na DEX:
-    // quantidade de BRLA/BRZ recebida por USDT enviado.
+    // Preço unitário de venda de USDT na DEX (token recebido por USDT).
     const rawDexPrice = d.usdtToToken?.status === 'OK'
-      ? Number(d.usdtToToken.buyAmount) /
-        Number(d.usdtToToken.sellAmount)
+      ? Number(d.usdtToToken.buyAmount) / Number(d.usdtToToken.sellAmount)
       : 0;
 
-    if (!(rawDexPrice > 0) || !Number.isFinite(rawDexPrice)) {
-      return [];
-    }
+    if (!(rawDexPrice > 0) || !Number.isFinite(rawDexPrice)) return [];
 
-    // Correção simples para aproximar a cotação exibida no LlamaSwap.
-    // Não representa impacto, slippage, gas ou taxas.
     const dexSellPrice = rawDexPrice * DEX_PRICE_CORRECTION;
-
     const out = [];
 
     for (const q of quotes) {
@@ -72,7 +68,7 @@
       const ask = Number(q.ask);
       if (!(ask > 0) || !Number.isFinite(ask)) continue;
 
-      // Somente esta rota: comprar USDT na CEX e vender na LlamaSwap.
+      // Compra na CEX e venda na LlamaSwap.
       out.push({
         buy: q.exchange,
         sell: DEX,
@@ -100,15 +96,12 @@
       (sf === 'all' || x.sell === sf)
     );
 
-    // Visão geral: somente oportunidades positivas.
     if (bf === 'all' && sf === 'all') {
       rows = rows.filter(x => x.spread > 0);
     }
 
     if (!rows.length) {
-      box.innerHTML =
-        '<p class="empty-results">Nenhuma oportunidade positiva disponível.</p>';
-
+      box.innerHTML = '<p class="empty-results">Nenhuma oportunidade positiva disponível.</p>';
       if ($('dexBest')) {
         $('dexBest').textContent = '—';
         $('dexBest').className = 'neutral';
@@ -120,6 +113,7 @@
 
     const cap = capital();
     const best = rows[0];
+    const estimatedUsdt = cap > 0 ? cap / best.buyPrice : 0;
     const gain = cap * best.spread / 100;
     const cls = best.spread > 0 ? 'positive' : 'negative';
     const sign = best.spread > 0 ? '+' : '';
@@ -128,15 +122,12 @@
       $('dexBest').textContent = sign + best.spread.toFixed(3) + '%';
       $('dexBest').className = cls;
     }
-    if ($('dexProfit')) {
-      $('dexProfit').textContent = 'Lucro bruto estimado: ' + money(gain);
-    }
-    if ($('dexRoute')) {
-      $('dexRoute').textContent = best.buy + ' → ' + DEX;
-    }
+    if ($('dexProfit')) $('dexProfit').textContent = 'Lucro bruto estimado: ' + money(gain);
+    if ($('dexRoute')) $('dexRoute').textContent = best.buy + ' → ' + DEX;
 
     box.innerHTML = rows.map(x => {
       const g = cap * x.spread / 100;
+      const estimated = cap > 0 ? cap / x.buyPrice : 0;
       const c = x.spread > 0 ? 'positive' : 'negative';
 
       return `
@@ -159,6 +150,7 @@
 
           <div class="opportunity-details">
             <span>Rota: <b>CEX → LlamaSwap</b></span>
+            <span>Quantidade estimada: <b>${quantity(estimated)} USDT</b></span>
             <span>
               Spread:
               <b class="${c}">${x.spread > 0 ? '+' : ''}${x.spread.toFixed(3)}%</b>
@@ -185,14 +177,8 @@
       const pair = $('dexPair').value;
       const cap = capital();
 
-      // Mantém a consulta das corretoras como estava.
-      const cr = await fetch('/api/markets?pair=USDT%2FBRL', {
-        cache: 'no-store'
-      });
-
-      if (!cr.ok) {
-        throw Error('Erro na consulta CEX: HTTP ' + cr.status);
-      }
+      const cr = await fetch('/api/markets?pair=USDT%2FBRL', { cache: 'no-store' });
+      if (!cr.ok) throw Error('Erro na consulta CEX: HTTP ' + cr.status);
 
       const cd = await cr.json();
       const quotes = cd.quotes || [];
@@ -200,9 +186,7 @@
         Number(q.ask) > 0 && Number(q.bid) > 0
       );
 
-      if (!validQuotes.length) {
-        throw Error('Nenhuma cotação CEX válida.');
-      }
+      if (!validQuotes.length) throw Error('Nenhuma cotação CEX válida.');
 
       const avg = validQuotes.reduce((sum, q) =>
         sum + (Number(q.ask) + Number(q.bid)) / 2, 0
@@ -218,18 +202,10 @@
         reverseCapital: reverseAmount
       });
 
-      // Mantém a chamada ao endpoint DEX existente.
-      const dr = await fetch('/api/dex?' + params.toString(), {
-        cache: 'no-store'
-      });
-
+      const dr = await fetch('/api/dex?' + params.toString(), { cache: 'no-store' });
       const dd = await dr.json();
-      if (!dr.ok) {
-        throw Error(dd.error || 'Erro na consulta DEX: HTTP ' + dr.status);
-      }
-      if (!dd.directions) {
-        throw Error(dd.error || 'Resposta DEX inválida.');
-      }
+      if (!dr.ok) throw Error(dd.error || 'Erro na consulta DEX: HTTP ' + dr.status);
+      if (!dd.directions) throw Error(dd.error || 'Resposta DEX inválida.');
 
       opportunities = calculate(validQuotes, dd);
       render();
@@ -257,7 +233,6 @@
     $('dexSellFilter')?.addEventListener('change', render);
     $('capital')?.addEventListener('input', render);
 
-    // Se o filtro tiver a opção LlamaSwap, deixa-a selecionada.
     const sellFilter = $('dexSellFilter');
     if (sellFilter && [...sellFilter.options].some(o => o.value === DEX)) {
       sellFilter.value = DEX;
