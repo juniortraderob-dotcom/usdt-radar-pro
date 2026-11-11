@@ -116,6 +116,27 @@ function setupFilters() {
   }
 }
 
+function renderExchanges(statuses) {
+  const container = $('exchanges');
+  if (!container) return;
+  container.replaceChildren();
+
+  names.forEach(name => {
+    const card = document.createElement('div');
+    card.className = 'source';
+
+    const title = document.createElement('strong');
+    title.textContent = name;
+
+    const status = document.createElement('span');
+    status.textContent = statuses[name] || 'Integração pendente';
+    status.className = status.textContent === 'Online' ? 'positive' : 'neutral';
+
+    card.append(title, status);
+    container.appendChild(card);
+  });
+}
+
 /*
   GERA TODAS AS COMBINAÇÕES DIRECIONAIS.
   Não elimina spreads negativos.
