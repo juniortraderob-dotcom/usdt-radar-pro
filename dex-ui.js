@@ -161,14 +161,14 @@
         exchange: quote.exchange,
         direction: 'DEX_TO_CEX',
 
-        leftName: DEX,
-rightName: quote.exchange,
+        leftName: quote.exchange,
+rightName: DEX,
 
-leftAction: 'COMPRAR USDT',
-rightAction: 'VENDER USDT',
+leftAction: 'VENDER USDT',
+rightAction: 'COMPRAR USDT',
 
-leftPrice: dexBuyPrice,
-rightPrice: bid,
+leftPrice: bid,
+rightPrice: dexBuyPrice,
 
         buyLocation: DEX,
         sellLocation: quote.exchange,
