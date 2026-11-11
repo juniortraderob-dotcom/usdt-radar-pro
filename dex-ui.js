@@ -3,7 +3,6 @@
   const $ = id => document.getElementById(id);
 
   const DEX = 'LlamaSwap';
-  const DEX_PRICE_CORRECTION = 1.001536;
   const ALERT_THRESHOLD = -0.45;
 
   const CEX = ['Binance', 'OKX', 'Bybit', 'Bitget', 'MEXC', 'KuCoin', 'Foxbit'];
@@ -76,8 +75,8 @@
     }
   }
 
-  // Calcula as duas direções, mantendo sempre a CEX à esquerda
-  // e a LlamaSwap à direita na apresentação.
+  // Calcula as duas direções.
+  // A CEX fica sempre à esquerda e a LlamaSwap à direita.
   function calculate(quotes, data) {
     const directions = data?.directions;
 
@@ -89,20 +88,22 @@
     const reverse = directions.tokenToUsdt;
 
     // DIREÇÃO 1:
-    // Compra USDT na CEX pelo ASK e vende na LlamaSwap.
+    // Compra USDT na CEX pelo ASK e vende na DEX.
     if (direct?.status === 'OK') {
-      const sellAmount = Number(direct.sellAmount);
-      const buyAmount = Number(direct.buyAmount);
+      const dexUsdtInput = Number(direct.sellAmount);
+      const dexTokenOutput = Number(direct.buyAmount);
 
-      const rawDexPrice = buyAmount / sellAmount;
+      // Cotação efetiva da DEX: BRLA por USDT.
+      // Não aplicamos nenhuma correção artificial.
+      const dexSellPrice =
+        dexUsdtInput > 0 && dexTokenOutput > 0
+          ? dexTokenOutput / dexUsdtInput
+          : 0;
 
       if (
-        rawDexPrice > 0 &&
-        Number.isFinite(rawDexPrice)
+        dexSellPrice > 0 &&
+        Number.isFinite(dexSellPrice)
       ) {
-        const dexSellPrice =
-          rawDexPrice * DEX_PRICE_CORRECTION;
-
         for (const quote of quotes) {
           if (!CEX.includes(quote.exchange)) continue;
 
@@ -110,30 +111,37 @@
 
           if (!(ask > 0) || !Number.isFinite(ask)) continue;
 
+          // Quantidade de USDT que o capital compra nesta CEX.
+          const usdtAmount = capital() / ask;
+
+          // Estimativa proporcional da saída em BRLA.
+          const estimatedTokenOutput =
+            usdtAmount * dexSellPrice;
+
           const spread =
-            ((dexSellPrice - ask) / ask) * 100;
+            ((estimatedTokenOutput - capital()) / capital()) * 100;
+
+          if (!Number.isFinite(spread)) continue;
 
           result.push({
             exchange: quote.exchange,
             direction: 'CEX_TO_DEX',
 
-            // Posição visual fixa: CEX à esquerda, DEX à direita.
             buy: quote.exchange,
             sell: DEX,
 
-            // Dados da operação real.
             buyLocation: quote.exchange,
             sellLocation: DEX,
             buyPrice: ask,
             sellPrice: dexSellPrice,
 
-            // Dados para exibição nas posições fixas.
             cexActionLabel: 'COMPRAR USDT',
             dexActionLabel: 'VENDER USDT',
             cexPrice: ask,
             dexPrice: dexSellPrice,
 
-            usdtAmount: sellAmount,
+            usdtAmount,
+            tokenOutput: estimatedTokenOutput,
             spread,
 
             route: `${quote.exchange} contra ${DEX}`,
@@ -144,7 +152,7 @@
     }
 
     // DIREÇÃO 2:
-    // Compra USDT na LlamaSwap com BRLA e vende na CEX pelo BID.
+    // Compra USDT na DEX com BRLA e vende na CEX pelo BID.
     if (reverse?.status === 'OK') {
       const tokenInput = Number(reverse.sellAmount);
       const usdtOutput = Number(reverse.buyAmount);
@@ -155,13 +163,8 @@
         Number.isFinite(tokenInput) &&
         Number.isFinite(usdtOutput)
       ) {
-        // Aplica a correção inversa à quantidade recebida de USDT.
-        const correctedUsdtOutput =
-          usdtOutput / DEX_PRICE_CORRECTION;
-
-        // Custo efetivo em BRL por USDT comprado na DEX.
-        const dexBuyPrice =
-          tokenInput / correctedUsdtOutput;
+        // Preço efetivo de compra na DEX.
+        const dexBuyPrice = tokenInput / usdtOutput;
 
         for (const quote of quotes) {
           if (!CEX.includes(quote.exchange)) continue;
@@ -171,33 +174,35 @@
           if (!(bid > 0) || !Number.isFinite(bid)) continue;
 
           // Valor recebido ao vender os USDT na CEX.
-          const finalValue = correctedUsdtOutput * bid;
+          const finalValue = usdtOutput * bid;
 
-          // Resultado sobre o capital inicial.
+          // Resultado sobre o capital enviado à DEX.
           const spread =
             ((finalValue - tokenInput) / tokenInput) * 100;
+
+          if (!Number.isFinite(spread)) continue;
 
           result.push({
             exchange: quote.exchange,
             direction: 'DEX_TO_CEX',
 
-            // A posição visual NÃO muda.
+            // Posição visual fixa.
             buy: quote.exchange,
             sell: DEX,
 
-            // Na operação real, compra na DEX e vende na CEX.
+            // Operação real: compra na DEX e vende na CEX.
             buyLocation: DEX,
             sellLocation: quote.exchange,
             buyPrice: dexBuyPrice,
             sellPrice: bid,
 
-            // A CEX continua à esquerda, mas agora é a venda.
             cexActionLabel: 'VENDER USDT',
             dexActionLabel: 'COMPRAR USDT',
             cexPrice: bid,
             dexPrice: dexBuyPrice,
 
-            usdtAmount: correctedUsdtOutput,
+            usdtAmount: usdtOutput,
+            tokenInput,
             spread,
 
             route: `${quote.exchange} contra ${DEX}`,
@@ -297,7 +302,6 @@
 
     const buyFilter = $('dexBuyFilter')?.value || 'all';
 
-    // O filtro sempre considera o nome da corretora CEX.
     const filteredRows = opportunities.filter(item =>
       buyFilter === 'all' || item.exchange === buyFilter
     );
