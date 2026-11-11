@@ -1,5 +1,6 @@
 
-const ZEROX_API_URL = 'https://api.0x.org/swap/allowance-holder/price';
+const PARASWAP_API_URL = 'https://api.paraswap.io/prices';
+const PARASWAP_VERSION = '6.2';
 
 const USDT = {
   symbol: 'USDT',
@@ -37,23 +38,14 @@ function parseUnits(value, decimals) {
 }
 
 function formatUnits(value, decimals) {
-  const raw = BigInt(value)
-    .toString()
-    .padStart(decimals + 1, '0');
-
+  const raw = BigInt(value).toString().padStart(decimals + 1, '0');
   const whole = raw.slice(0, -decimals);
   const fraction = raw.slice(-decimals).replace(/0+$/, '');
 
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-async function getQuote(context, sellToken, buyToken, inputAmount) {
-  const apiKey = context.env.ZEROX_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('ZEROX_API_KEY não configurada na Cloudflare.');
-  }
-
+async function getQuote(sellToken, buyToken, inputAmount) {
   const sellAmountRaw = parseUnits(inputAmount, sellToken.decimals);
 
   if (sellAmountRaw <= 0n) {
@@ -61,20 +53,22 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
   }
 
   const params = new URLSearchParams({
-    chainId: '137',
-    sellToken: sellToken.address,
-    buyToken: buyToken.address,
-    sellAmount: sellAmountRaw.toString()
+    srcToken: sellToken.address,
+    destToken: buyToken.address,
+    amount: sellAmountRaw.toString(),
+    srcDecimals: String(sellToken.decimals),
+    destDecimals: String(buyToken.decimals),
+    side: 'SELL',
+    network: '137',
+    version: PARASWAP_VERSION
   });
 
   const response = await fetch(
-    `${ZEROX_API_URL}?${params.toString()}`,
+    `${PARASWAP_API_URL}?${params.toString()}`,
     {
       method: 'GET',
       headers: {
-        '0x-api-key': apiKey,
-        '0x-version': 'v2',
-        'Content-Type': 'application/json'
+        'Accept': 'application/json'
       },
       signal: AbortSignal.timeout(15000)
     }
@@ -84,25 +78,24 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
 
   if (!response.ok) {
     const message =
-      data?.reason ||
+      data?.error ||
       data?.message ||
-      data?.validationErrors?.[0]?.reason ||
+      data?.detail ||
       `Erro HTTP ${response.status}`;
 
-    throw new Error(`0x API: ${message}`);
+    throw new Error(`ParaSwap: ${message}`);
   }
 
-  if (!data.buyAmount) {
-    throw new Error('A 0x não retornou quantidade de saída.');
+  const route = data?.priceRoute || data;
+  const outputRaw = route?.destAmount;
+
+  if (!outputRaw) {
+    throw new Error('ParaSwap não retornou destAmount.');
   }
 
-  if (data.liquidityAvailable === false) {
-    throw new Error('A 0x informou que não há liquidez disponível.');
-  }
+  const output = BigInt(outputRaw);
 
-  const outputRaw = BigInt(data.buyAmount);
-
-  if (outputRaw <= 0n) {
+  if (output <= 0n) {
     throw new Error('Quantidade de saída inválida.');
   }
 
@@ -112,7 +105,7 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
   );
 
   const actualBuyAmount = formatUnits(
-    outputRaw,
+    output,
     buyToken.decimals
   );
 
@@ -126,16 +119,16 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
     sellSymbol: sellToken.symbol,
     buySymbol: buyToken.symbol,
     unitRate: buyNumber / sellNumber,
-    price: data.price || null,
-    guaranteedPrice: data.guaranteedPrice || null,
-    liquidityAvailable: data.liquidityAvailable,
-    calculation: 'Cotação 0x para a quantidade integral informada.'
+    gasCostUSD: route.gasCostUSD ?? null,
+    gasCost: route.gasCost ?? null,
+    priceRoute: route,
+    calculation: 'Cotação ParaSwap para a quantidade integral informada.'
   };
 }
 
-async function safeQuote(context, sellToken, buyToken, inputAmount) {
+async function safeQuote(sellToken, buyToken, inputAmount) {
   try {
-    return await getQuote(context, sellToken, buyToken, inputAmount);
+    return await getQuote(sellToken, buyToken, inputAmount);
   } catch (error) {
     return {
       status: 'ERRO',
@@ -176,14 +169,9 @@ export async function onRequestGet(context) {
     );
   }
 
-  // COMPRA NA DEX:
-  // Envia BRLA/BRZ e recebe USDT.
-  //
-  // VENDA NA DEX:
-  // Envia USDT e recebe BRLA/BRZ.
   const [tokenToUsdt, usdtToToken] = await Promise.all([
-    safeQuote(context, token, USDT, capital),
-    safeQuote(context, USDT, token, reverseCapital)
+    safeQuote(token, USDT, capital),
+    safeQuote(USDT, token, reverseCapital)
   ]);
 
   const successfulQuotes = [
@@ -192,7 +180,8 @@ export async function onRequestGet(context) {
   ].filter(quote => quote.status === 'OK');
 
   return Response.json({
-    source: '0x Swap API v2',
+    source: 'ParaSwap API v6.2',
+    aggregatorReference: 'LlamaSwap',
     network: 'Polygon',
     chainId: 137,
     pair,
@@ -215,7 +204,7 @@ export async function onRequestGet(context) {
 
     successfulQuotes: successfulQuotes.length,
 
-    note: 'Cotações indicativas da 0x. Os valores podem variar conforme rota, liquidez, impacto, slippage e taxas.',
+    note: 'Cotação ParaSwap para o valor integral de entrada. A rota pode diferir da rota escolhida pela interface LlamaSwap conforme horário, liquidez, gas e parâmetros do agregador. Valores indicativos; confirme antes de operar.',
 
     updatedAt: new Date().toISOString()
   }, {
