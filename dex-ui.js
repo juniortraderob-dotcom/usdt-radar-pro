@@ -85,60 +85,84 @@
 
   // ALERTA NEGATIVO EXCLUSIVO DO DEX.
   // Reaproveita sendTelegramAlert() já definido no app.js.
-  async function checkNegativeDexAlerts(items) {
-    const negative = items.filter(x => x.spread < 0);
-    const currentKeys = new Set(
-      negative.map(x => `${x.buy}|${x.sell}`)
-    );
+  
+// ALERTA NEGATIVO DEX — LIMITE DE -0,45%
+async function checkNegativeDexAlerts(items) {
+  const ALERT_THRESHOLD = -0.45;
 
-    const newlyNegative = negative.filter(x =>
-      !lastNegativeDexAlerts.has(`${x.buy}|${x.sell}`)
-    );
+  // Só considera spreads iguais ou piores que -0,45%.
+  const negative = items.filter(x => x.spread <= ALERT_THRESHOLD);
 
-    // Atualiza a memória quando as rotas deixam de estar negativas.
-    if (!newlyNegative.length) {
-      lastNegativeDexAlerts = currentKeys;
-      return;
-    }
+  const currentKeys = new Set(
+    negative.map(x => `${x.buy}|${x.sell}`)
+  );
 
-    if (typeof window.sendTelegramAlert !== 'function') {
-      console.warn('Telegram não disponível: sendTelegramAlert() não foi encontrado no app.js.');
-      return;
-    }
+  // Evita repetir alerta a cada atualização de 20 segundos.
+  const newlyNegative = negative.filter(x =>
+    !lastNegativeDexAlerts.has(`${x.buy}|${x.sell}`)
+  );
 
-    const cap = capital();
-    const lines = newlyNegative.map(x => {
-      const estimatedUsdt = cap > 0 ? cap / x.buyPrice : 0;
-      const estimatedLoss = Math.abs(cap * x.spread / 100);
-
-      return [
-        `🔻 ${x.buy} → ${DEX}`,
-        `Compra CEX: ${price(x.buyPrice)}`,
-        `Venda DEX: ${price(x.sellPrice)}`,
-        `Spread negativo: ${x.spread.toFixed(3)}%`,
-        `Quantidade estimada: ${quantity(estimatedUsdt)} USDT`,
-        `Prejuízo bruto estimado: ${money(estimatedLoss)}`
-      ].join('\n');
-    });
-
-    const message =
-      `⚠️ ALERTA DEX — SPREAD NEGATIVO\n` +
-      `Par: ${$('dexPair')?.value || 'USDT/BRLA'}\n` +
-      `Capital considerado: ${money(cap)}\n\n` +
-      lines.join('\n\n') +
-      `\n\nCotação indicativa. Não é ordem de operação.`;
-
-    try {
-      const sent = await window.sendTelegramAlert(message);
-      if (sent) {
-        lastNegativeDexAlerts = currentKeys;
-      } else {
-        console.error('O Telegram não confirmou o envio do alerta negativo DEX.');
-      }
-    } catch (error) {
-      console.error('Falha no alerta negativo DEX:', error);
-    }
+  if (!newlyNegative.length) {
+    lastNegativeDexAlerts = currentKeys;
+    return;
   }
+
+  if (typeof window.sendTelegramAlert !== 'function') {
+    console.warn('Telegram não disponível.');
+    return;
+  }
+
+  // Converte letras e números para caracteres Unicode em negrito.
+  const bold = text => String(text).replace(/[A-Za-z0-9]/g, c => {
+    const normal = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const strong = '𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗';
+    return strong[normal.indexOf(c)] || c;
+  });
+
+  const cap = capital();
+  const pair = $('dexPair')?.value || 'USDT/BRLA';
+
+  const sections = newlyNegative.map(x => {
+    const estimatedUsdt = cap > 0 ? cap / x.buyPrice : 0;
+    const estimatedLoss = Math.abs(cap * x.spread / 100);
+
+    return [
+      `🔻 ${bold(x.buy + ' → LlamaSwap')}`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `🟠 ${bold('Spread negativo:')} ${bold(x.spread.toFixed(3) + '%')}`,
+      `🛒 ${bold('Compra CEX:')} ${price(x.buyPrice)}`,
+      `🔄 ${bold('Venda LlamaSwap:')} ${price(x.sellPrice)}`,
+      `💰 ${bold('Quantidade:')} ${quantity(estimatedUsdt)} USDT`,
+      `📉 ${bold('Resultado bruto:')} -${money(estimatedLoss)}`
+    ].join('\n');
+  });
+
+  const message = [
+    `🚨 ${bold('ALERTA DEX — SPREAD NEGATIVO')}`,
+    `━━━━━━━━━━━━━━━━━━`,
+    `📊 ${bold('Par:')} ${pair}`,
+    `💵 ${bold('Capital:')} ${money(cap)}`,
+    `🎯 ${bold('Limite de alerta:')} -0,450%`,
+    ``,
+    sections.join('\n\n'),
+    ``,
+    `⚠️ ${bold('ATENÇÃO:')} Cotação indicativa. Confira o preço e o impacto antes de operar.`,
+    `━━━━━━━━━━━━━━━━━━`
+  ].join('\n');
+
+  try {
+    const sent = await window.sendTelegramAlert(message);
+
+    if (sent) {
+      lastNegativeDexAlerts = currentKeys;
+    } else {
+      console.error('O Telegram não confirmou o envio do alerta DEX.');
+    }
+  } catch (error) {
+    console.error('Falha no alerta negativo DEX:', error);
+  }
+}
+
 
   function render() {
     const box = $('dexRows');
