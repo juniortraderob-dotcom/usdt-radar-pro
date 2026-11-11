@@ -162,13 +162,13 @@
         direction: 'DEX_TO_CEX',
 
         leftName: DEX,
-        rightName: quote.exchange,
+rightName: quote.exchange,
 
-        leftAction: 'COMPRAR USDT',
-        rightAction: 'VENDER USDT',
+leftAction: 'COMPRAR USDT',
+rightAction: 'VENDER USDT',
 
-        leftPrice: dexBuyPrice,
-        rightPrice: bid,
+leftPrice: dexBuyPrice,
+rightPrice: bid,
 
         buyLocation: DEX,
         sellLocation: quote.exchange,
