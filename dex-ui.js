@@ -87,158 +87,121 @@
     }
   }
 
+  // =====================================================
+  // CÁLCULO DAS OPORTUNIDADES
+  //
+  // A quantidade de USDT vem da cotação BRLA -> USDT.
+  // O preço de venda da Llama vem da cotação USDT -> BRLA.
+  //
+  // Isso mantém a quantidade real estimada da operação,
+  // mas compara os preços usando a mesma lógica do
+  // outro radar.
+  // =====================================================
+
   function calculate(quotes, data) {
     const directions = data?.directions;
 
     if (!directions) return [];
 
-    const result = [];
-
-    const direct = directions.usdtToToken;
-    const reverse = directions.tokenToUsdt;
     const cap = capital();
 
     if (!(cap > 0)) return [];
 
-    // =====================================================
-    // DIREÇÃO 1:
-    // COMPRA USDT NA CEX PELO ASK.
-    // VENDE USDT NA LLAMASWAP.
-    //
-    // Visual:
-    // CEX à esquerda | LlamaSwap à direita.
-    // =====================================================
+    const reverse = directions.tokenToUsdt;
+    const direct = directions.usdtToToken;
 
-    if (direct?.status === 'OK') {
-      const dexUsdtInput = Number(direct.sellAmount);
-      const dexTokenOutput = Number(direct.buyAmount);
-
-      if (
-        dexUsdtInput > 0 &&
-        dexTokenOutput > 0 &&
-        Number.isFinite(dexUsdtInput) &&
-        Number.isFinite(dexTokenOutput)
-      ) {
-        // Quantidade de BRLA recebida por USDT enviado.
-        const dexRate = dexTokenOutput / dexUsdtInput;
-
-        for (const quote of quotes) {
-          if (!CEX.includes(quote.exchange)) continue;
-
-          const ask = Number(quote.ask);
-
-          if (!(ask > 0) || !Number.isFinite(ask)) continue;
-
-          // Quantidade comprada na CEX com o capital informado.
-          const usdtAmount = cap / ask;
-
-          // Estimativa proporcional da saída na DEX.
-          const tokenOutput = usdtAmount * dexRate;
-
-          // Resultado da operação sobre o capital inicial.
-          const finalValue = tokenOutput;
-          const spread = ((finalValue - cap) / cap) * 100;
-
-          if (!Number.isFinite(spread)) continue;
-
-          result.push({
-            exchange: quote.exchange,
-            direction: 'CEX_TO_DEX',
-
-            leftName: quote.exchange,
-            rightName: DEX,
-
-            leftAction: 'COMPRAR USDT',
-            rightAction: 'VENDER USDT',
-
-            leftPrice: ask,
-            rightPrice: dexRate,
-
-            buyLocation: quote.exchange,
-            sellLocation: DEX,
-            buyPrice: ask,
-            sellPrice: dexRate,
-
-            usdtAmount,
-            tokenAmount: tokenOutput,
-            spread,
-
-            route: `${quote.exchange} → ${DEX}`,
-            operationRoute: `${quote.exchange} → ${DEX}`
-          });
-        }
-      }
+    if (
+      reverse?.status !== 'OK' ||
+      direct?.status !== 'OK'
+    ) {
+      return [];
     }
 
-    // =====================================================
-    // DIREÇÃO 2:
-    // COMPRA USDT NA LLAMASWAP COM BRLA.
-    // VENDE USDT NA CEX PELO BID.
-    //
-    // Visual:
-    // LlamaSwap à esquerda | CEX à direita.
-    // =====================================================
+    // Quantidade real estimada para os R$ 3.000 em BRLA.
+    const tokenInput = Number(reverse.sellAmount);
+    const usdtAmount = Number(reverse.buyAmount);
 
-    if (reverse?.status === 'OK') {
-      const tokenInput = Number(reverse.sellAmount);
-      const usdtOutput = Number(reverse.buyAmount);
+    // Preço efetivo da LlamaSwap na direção de venda.
+    const directUsdtInput = Number(direct.sellAmount);
+    const directTokenOutput = Number(direct.buyAmount);
 
-      if (
-        tokenInput > 0 &&
-        usdtOutput > 0 &&
-        Number.isFinite(tokenInput) &&
-        Number.isFinite(usdtOutput)
-      ) {
-        // Preço efetivo de compra na DEX.
-        const dexBuyPrice = tokenInput / usdtOutput;
-
-        for (const quote of quotes) {
-          if (!CEX.includes(quote.exchange)) continue;
-
-          const bid = Number(quote.bid);
-
-          if (!(bid > 0) || !Number.isFinite(bid)) continue;
-
-          // Valor recebido ao vender USDT na CEX.
-          const finalValue = usdtOutput * bid;
-
-          // Resultado real estimado sobre o capital enviado.
-          const spread =
-            ((finalValue - tokenInput) / tokenInput) * 100;
-
-          if (!Number.isFinite(spread)) continue;
-
-          result.push({
-            exchange: quote.exchange,
-            direction: 'DEX_TO_CEX',
-
-            leftName: DEX,
-            rightName: quote.exchange,
-
-            leftAction: 'COMPRAR USDT',
-            rightAction: 'VENDER USDT',
-
-            leftPrice: dexBuyPrice,
-            rightPrice: bid,
-
-            buyLocation: DEX,
-            sellLocation: quote.exchange,
-            buyPrice: dexBuyPrice,
-            sellPrice: bid,
-
-            usdtAmount: usdtOutput,
-            tokenAmount: tokenInput,
-            spread,
-
-            route: `${DEX} → ${quote.exchange}`,
-            operationRoute: `${DEX} → ${quote.exchange}`
-          });
-        }
-      }
+    if (
+      !(tokenInput > 0) ||
+      !(usdtAmount > 0) ||
+      !(directUsdtInput > 0) ||
+      !(directTokenOutput > 0)
+    ) {
+      return [];
     }
 
-    return result.sort((a, b) => b.spread - a.spread);
+    // Preço de venda calculado pela cotação inversa da 0x.
+    const dexSellPrice =
+      directTokenOutput / directUsdtInput;
+
+    if (
+      !(dexSellPrice > 0) ||
+      !Number.isFinite(dexSellPrice)
+    ) {
+      return [];
+    }
+
+    const result = [];
+
+    for (const quote of quotes) {
+      if (!CEX.includes(quote.exchange)) continue;
+
+      const ask = Number(quote.ask);
+
+      if (!(ask > 0) || !Number.isFinite(ask)) continue;
+
+      // Compara a venda na LlamaSwap com a compra na CEX.
+      // Mantém a quantidade retornada pela cotação integral.
+      const finalValue = usdtAmount * dexSellPrice;
+
+      const spread =
+        ((dexSellPrice / ask) - 1) * 100;
+
+      if (!Number.isFinite(spread)) continue;
+
+      const grossResult = finalValue - cap;
+
+      result.push({
+        exchange: quote.exchange,
+        direction: 'CEX_TO_DEX',
+
+        leftName: quote.exchange,
+        rightName: DEX,
+
+        leftAction: 'COMPRAR USDT',
+        rightAction: 'VENDER USDT',
+
+        leftPrice: ask,
+        rightPrice: dexSellPrice,
+
+        buyLocation: quote.exchange,
+        sellLocation: DEX,
+        buyPrice: ask,
+        sellPrice: dexSellPrice,
+
+        usdtAmount,
+        tokenAmount: tokenInput,
+
+        capital: cap,
+        finalValue,
+        grossResult,
+        spread,
+
+        route: `${quote.exchange} → ${DEX}`,
+        operationRoute: `${quote.exchange} → ${DEX}`
+      });
+    }
+
+    return result.sort((a, b) => a.spread - b.spread);
   }
+
+  // =====================================================
+  // ALERTAS DE SPREAD NEGATIVO
+  // =====================================================
 
   async function checkNegativeDexAlerts(items) {
     const negative = items.filter(
@@ -273,9 +236,6 @@
     const pair = $('dexPair')?.value || 'USDT/BRLA';
 
     const sections = newlyNegative.map(item => {
-      const estimatedLoss =
-        Math.abs(cap * item.spread / 100);
-
       return [
         `🔻 ${bold(item.operationRoute)}`,
         '━━━━━━━━━━━━━━━━━━',
@@ -285,7 +245,7 @@
         `🔄 ${bold('Venda em:')} ${item.sellLocation}`,
         `💰 ${bold('Preço de venda:')} ${price(item.sellPrice)}`,
         `🪙 ${bold('Quantidade estimada:')} ${quantity(item.usdtAmount)} USDT`,
-        `💸 ${bold('Resultado bruto estimado:')} ${money(-estimatedLoss)}`
+        `💸 ${bold('Resultado bruto estimado:')} ${money(item.grossResult)}`
       ].join('\n');
     });
 
@@ -317,8 +277,13 @@
     }
   }
 
+  // =====================================================
+  // EXIBIÇÃO
+  // =====================================================
+
   function render() {
     const box = $('dexRows');
+
     if (!box) return;
 
     const buyFilter = $('dexBuyFilter')?.value || 'all';
@@ -360,11 +325,12 @@
       return;
     }
 
-    const cap = capital();
     const best = rows[0];
-    const gain = cap * best.spread / 100;
 
-    const cls = best.spread > 0 ? 'positive' : 'negative';
+    const cls = best.spread >= 0
+      ? 'positive'
+      : 'negative';
+
     const sign = best.spread > 0 ? '+' : '';
 
     if ($('dexBest')) {
@@ -376,9 +342,10 @@
 
     if ($('dexProfit')) {
       $('dexProfit').textContent =
-        (best.spread >= 0
+        (best.grossResult >= 0
           ? 'Lucro bruto estimado: '
-          : 'Resultado bruto estimado: ') + money(gain);
+          : 'Resultado bruto estimado: ') +
+        money(best.grossResult);
     }
 
     if ($('dexRoute')) {
@@ -386,9 +353,7 @@
     }
 
     box.innerHTML = rows.map(item => {
-      const result = cap * item.spread / 100;
-
-      const itemClass = item.spread > 0
+      const itemClass = item.spread >= 0
         ? 'positive'
         : 'negative';
 
@@ -416,9 +381,25 @@
 
           <div class="opportunity-details">
             <span>Rota: <b>${safe(item.route)}</b></span>
-            <span>Quantidade estimada: <b>${quantity(item.usdtAmount)} USDT</b></span>
-            <span>Spread: <b class="${itemClass}">${spreadSign}${item.spread.toFixed(3)}%</b></span>
-            <span>Resultado bruto estimado: <b class="${itemClass}">${money(result)}</b></span>
+
+            <span>
+              Quantidade estimada:
+              <b>${quantity(item.usdtAmount)} USDT</b>
+            </span>
+
+            <span>
+              Spread:
+              <b class="${itemClass}">
+                ${spreadSign}${item.spread.toFixed(3)}%
+              </b>
+            </span>
+
+            <span>
+              Resultado bruto estimado:
+              <b class="${itemClass}">
+                ${money(item.grossResult)}
+              </b>
+            </span>
           </div>
 
           <div class="exchange-buttons">
@@ -435,6 +416,10 @@
       `;
     }).join('');
   }
+
+  // =====================================================
+  // ATUALIZAÇÃO DAS COTAÇÕES
+  // =====================================================
 
   async function refresh() {
     if (busy) return;
@@ -467,22 +452,23 @@
       }
 
       const cexData = await cexResponse.json();
+
       const quotes = cexData.quotes || [];
 
       const validQuotes = quotes.filter(quote =>
         CEX.includes(quote.exchange) &&
-        Number(quote.ask) > 0 &&
-        Number(quote.bid) > 0
+        Number(quote.ask) > 0
       );
 
       if (!validQuotes.length) {
         throw new Error('Nenhuma cotação CEX válida.');
       }
 
-      // Estimativa da quantidade de USDT correspondente ao capital.
+      // Quantidade de USDT correspondente ao capital.
+      // A API recebe a quantidade integral de BRLA para cotar.
       const average = validQuotes.reduce((sum, quote) =>
         sum + (
-          (Number(quote.ask) + Number(quote.bid)) / 2
+          (Number(quote.ask) + Number(quote.bid || quote.ask)) / 2
         ), 0
       ) / validQuotes.length;
 
@@ -544,6 +530,10 @@
     }
   }
 
+  // =====================================================
+  // INICIALIZAÇÃO
+  // =====================================================
+
   function init() {
     if (!$('dexRows')) return;
 
@@ -560,6 +550,7 @@
     $('capital')?.addEventListener('input', render);
 
     refresh();
+
     setInterval(refresh, 20000);
   }
 
