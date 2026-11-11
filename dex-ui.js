@@ -220,6 +220,11 @@
             <span>Spread: <b class="${itemClass}">${spreadSign}${item.spread.toFixed(3)}%</b></span>
             <span>Resultado bruto estimado: <b class="${itemClass}">${money(result)}</b></span>
           </div>
+          <div class="exchange-buttons">
+            <a class="exchange-link" href="https://swap.defillama.com/" target="_blank" rel="noopener noreferrer">
+              Abrir LlamaSwap ↗
+            </a>
+          </div>
         </article>
       `;
     }).join('');
