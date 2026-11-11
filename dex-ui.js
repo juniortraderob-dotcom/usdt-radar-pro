@@ -212,7 +212,9 @@
       }
     }
 
-    return result.sort((a, b) => b.spread - a.spread);
+    return result
+  .filter(item => item.direction === 'DEX_TO_CEX')
+  .sort((a, b) => b.spread - a.spread);
   }
 
   // Alerta negativo exclusivo da DEX.
