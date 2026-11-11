@@ -47,8 +47,6 @@ function formatUnits(value, decimals) {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-// Consulta a 0x usando a quantidade REAL da operação.
-// Não consulta apenas 1 token e não multiplica uma cotação unitária.
 async function getQuote(context, sellToken, buyToken, inputAmount) {
   const apiKey = context.env.ZEROX_API_KEY;
 
@@ -56,10 +54,7 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
     throw new Error('ZEROX_API_KEY não configurada na Cloudflare.');
   }
 
-  const sellAmountRaw = parseUnits(
-    inputAmount,
-    sellToken.decimals
-  );
+  const sellAmountRaw = parseUnits(inputAmount, sellToken.decimals);
 
   if (sellAmountRaw <= 0n) {
     throw new Error('Quantidade de entrada inválida.');
@@ -134,18 +129,13 @@ async function getQuote(context, sellToken, buyToken, inputAmount) {
     price: data.price || null,
     guaranteedPrice: data.guaranteedPrice || null,
     liquidityAvailable: data.liquidityAvailable,
-    calculation: 'Cotação 0x consultada diretamente para a quantidade integral informada.'
+    calculation: 'Cotação 0x para a quantidade integral informada.'
   };
 }
 
 async function safeQuote(context, sellToken, buyToken, inputAmount) {
   try {
-    return await getQuote(
-      context,
-      sellToken,
-      buyToken,
-      inputAmount
-    );
+    return await getQuote(context, sellToken, buyToken, inputAmount);
   } catch (error) {
     return {
       status: 'ERRO',
@@ -159,9 +149,7 @@ async function safeQuote(context, sellToken, buyToken, inputAmount) {
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
 
-  const pair =
-    url.searchParams.get('pair') || 'USDT/BRLA';
-
+  const pair = url.searchParams.get('pair') || 'USDT/BRLA';
   const token = TOKENS[pair];
 
   if (!token) {
@@ -171,23 +159,12 @@ export async function onRequestGet(context) {
     );
   }
 
-  const capital =
-    url.searchParams.get('capital') || '1000';
-
-  const reverseCapital =
-    url.searchParams.get('reverseCapital') || '1000';
+  const capital = url.searchParams.get('capital') || '1000';
+  const reverseCapital = url.searchParams.get('reverseCapital') || '1000';
 
   try {
-    // Valida as duas quantidades antes de consultar a 0x.
-    const tokenRaw = parseUnits(
-      capital,
-      token.decimals
-    );
-
-    const usdtRaw = parseUnits(
-      reverseCapital,
-      USDT.decimals
-    );
+    const tokenRaw = parseUnits(capital, token.decimals);
+    const usdtRaw = parseUnits(reverseCapital, USDT.decimals);
 
     if (tokenRaw <= 0n || usdtRaw <= 0n) {
       throw new Error('As quantidades devem ser maiores que zero.');
@@ -199,27 +176,14 @@ export async function onRequestGet(context) {
     );
   }
 
-  // DIREÇÃO INVERSA:
-  // Usa BRLA/BRZ para comprar USDT na 0x.
+  // COMPRA NA DEX:
+  // Envia BRLA/BRZ e recebe USDT.
   //
-  // DIREÇÃO DIRETA:
-  // Usa USDT para comprar BRLA/BRZ na 0x.
-  //
-  // Cada consulta usa a quantidade integral da operação.
+  // VENDA NA DEX:
+  // Envia USDT e recebe BRLA/BRZ.
   const [tokenToUsdt, usdtToToken] = await Promise.all([
-    safeQuote(
-      context,
-      token,
-      USDT,
-      capital
-    ),
-
-    safeQuote(
-      context,
-      USDT,
-      token,
-      reverseCapital
-    )
+    safeQuote(context, token, USDT, capital),
+    safeQuote(context, USDT, token, reverseCapital)
   ]);
 
   const successfulQuotes = [
@@ -228,7 +192,6 @@ export async function onRequestGet(context) {
   ].filter(quote => quote.status === 'OK');
 
   return Response.json({
-    diagnosticMode: true,
     source: '0x Swap API v2',
     network: 'Polygon',
     chainId: 137,
@@ -252,7 +215,7 @@ export async function onRequestGet(context) {
 
     successfulQuotes: successfulQuotes.length,
 
-    note: 'A 0x recebe a quantidade integral de entrada em cada direção e retorna a quantidade estimada de saída. As cotações são indicativas e podem variar. Confira impacto, slippage, gas e taxas antes de operar.',
+    note: 'Cotações indicativas da 0x. Os valores podem variar conforme rota, liquidez, impacto, slippage e taxas.',
 
     updatedAt: new Date().toISOString()
   }, {
