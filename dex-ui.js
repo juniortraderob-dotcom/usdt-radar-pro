@@ -5,6 +5,11 @@
   const DEX = 'LlamaSwap';
   const ALERT_THRESHOLD = -0.45;
 
+  // Referência observada na LlamaSwap:
+  // diferença média de R$ 5,22 para 500 USDT.
+  const DEX_REFERENCE_DIFFERENCE = 5.22;
+  const DEX_REFERENCE_USDT = 500;
+
   const CEX = [
     'Binance',
     'OKX',
@@ -88,105 +93,158 @@
   }
 
   // =====================================================
-  // CÁLCULO DAS OPORTUNIDADES
-  //
-  // Compra USDT na LlamaSwap usando BRLA/BRZ.
-  // Vende USDT na corretora usando o BID.
-  //
-  // A quantidade de USDT é mantida exatamente como
-  // retornada pela cotação da API.
+  // CÁLCULO DAS DUAS DIREÇÕES
   // =====================================================
 
   function calculate(quotes, data) {
-    const reverse = data?.directions?.tokenToUsdt;
+    const directions = data?.directions;
     const cap = capital();
 
-    if (
-      !reverse ||
-      reverse.status !== 'OK' ||
-      !(cap > 0)
-    ) {
-      return [];
-    }
-
-    const tokenInput = Number(reverse.sellAmount);
-    const usdtAmount = Number(reverse.buyAmount);
-
-    if (
-      !(tokenInput > 0) ||
-      !(usdtAmount > 0) ||
-      !Number.isFinite(tokenInput) ||
-      !Number.isFinite(usdtAmount)
-    ) {
-      return [];
-    }
-
-    // Custo efetivo de compra de cada USDT na DEX.
-    const dexBuyPrice = tokenInput / usdtAmount;
-
-    if (
-      !(dexBuyPrice > 0) ||
-      !Number.isFinite(dexBuyPrice)
-    ) {
-      return [];
-    }
+    if (!directions || !(cap > 0)) return [];
 
     const result = [];
 
-    for (const quote of quotes) {
-      if (!CEX.includes(quote.exchange)) continue;
+    // ---------------------------------------------------
+    // DIREÇÃO 1:
+    // COMPRA USDT NA LLAMASWAP
+    // VENDE USDT NA CORRETORA (BID)
+    // ---------------------------------------------------
 
-      // Para vender USDT na corretora, usamos o BID.
-      const bid = Number(quote.bid);
+    const dexBuy = directions.tokenToUsdt;
 
-      if (!(bid > 0) || !Number.isFinite(bid)) continue;
-
-      // Valor recebido ao vender a quantidade cotada.
-      const finalValue = usdtAmount * bid;
-
-      // Resultado bruto da operação.
-      const grossResult = finalValue - tokenInput;
-
-      // Spread real da operação DEX -> CEX.
-      const spread = (grossResult / tokenInput) * 100;
+    if (dexBuy?.status === 'OK') {
+      const tokenInput = Number(dexBuy.sellAmount);
+      const usdtAmount = Number(dexBuy.buyAmount);
 
       if (
-        !Number.isFinite(spread) ||
-        !Number.isFinite(grossResult)
+        tokenInput > 0 &&
+        usdtAmount > 0 &&
+        Number.isFinite(tokenInput) &&
+        Number.isFinite(usdtAmount)
       ) {
-        continue;
+        const dexBuyPrice = tokenInput / usdtAmount;
+
+        for (const quote of quotes) {
+          if (!CEX.includes(quote.exchange)) continue;
+
+          const bid = Number(quote.bid);
+
+          if (!(bid > 0) || !Number.isFinite(bid)) continue;
+
+          const finalValue = usdtAmount * bid;
+          const grossResult = finalValue - tokenInput;
+          const spread = (grossResult / tokenInput) * 100;
+
+          if (
+            !Number.isFinite(spread) ||
+            !Number.isFinite(grossResult)
+          ) continue;
+
+          result.push({
+            exchange: quote.exchange,
+            direction: 'DEX_TO_CEX',
+
+            leftName: quote.exchange,
+            rightName: DEX,
+
+            leftAction: 'VENDER USDT',
+            rightAction: 'COMPRAR USDT',
+
+            leftPrice: bid,
+            rightPrice: dexBuyPrice,
+
+            buyLocation: DEX,
+            sellLocation: quote.exchange,
+
+            buyPrice: dexBuyPrice,
+            sellPrice: bid,
+
+            usdtAmount,
+            tokenAmount: tokenInput,
+
+            capital: tokenInput,
+            finalValue,
+            grossResult,
+            spread,
+
+            route: `${DEX} → ${quote.exchange}`,
+            operationRoute: `${DEX} → ${quote.exchange}`,
+            arrow: '←'
+          });
+        }
       }
+    }
 
-      result.push({
-        exchange: quote.exchange,
-        direction: 'DEX_TO_CEX',
+    // ---------------------------------------------------
+    // DIREÇÃO 2:
+    // COMPRA USDT NA CORRETORA (ASK)
+    // VENDE USDT NA LLAMASWAP
+    // ---------------------------------------------------
 
-        leftName: quote.exchange,
-rightName: DEX,
+    const dexSell = directions.usdtToToken;
 
-leftAction: 'VENDER USDT',
-rightAction: 'COMPRAR USDT',
+    if (dexSell?.status === 'OK') {
+      const usdtAmount = Number(dexSell.sellAmount);
+      const tokenOutput = Number(dexSell.buyAmount);
 
-leftPrice: bid,
-rightPrice: dexBuyPrice,
+      if (
+        usdtAmount > 0 &&
+        tokenOutput > 0 &&
+        Number.isFinite(usdtAmount) &&
+        Number.isFinite(tokenOutput)
+      ) {
+        const dexSellPrice = tokenOutput / usdtAmount;
 
-        buyLocation: DEX,
-        sellLocation: quote.exchange,
+        for (const quote of quotes) {
+          if (!CEX.includes(quote.exchange)) continue;
 
-        buyPrice: dexBuyPrice,
-        sellPrice: bid,
+          const ask = Number(quote.ask);
 
-        usdtAmount,
-        tokenAmount: tokenInput,
+          if (!(ask > 0) || !Number.isFinite(ask)) continue;
 
-        capital: tokenInput,
-        finalValue,
-        grossResult,
-        spread,
+          const cost = usdtAmount * ask;
+          const finalValue = tokenOutput;
+          const grossResult = finalValue - cost;
+          const spread = (grossResult / cost) * 100;
 
-        route: `${DEX} → ${quote.exchange}`,
-        operationRoute: `${DEX} → ${quote.exchange}`
-      });
+          if (
+            !Number.isFinite(spread) ||
+            !Number.isFinite(grossResult)
+          ) continue;
+
+          result.push({
+            exchange: quote.exchange,
+            direction: 'CEX_TO_DEX',
+
+            leftName: quote.exchange,
+            rightName: DEX,
+
+            leftAction: 'COMPRAR USDT',
+            rightAction: 'VENDER USDT',
+
+            leftPrice: ask,
+            rightPrice: dexSellPrice,
+
+            buyLocation: quote.exchange,
+            sellLocation: DEX,
+
+            buyPrice: ask,
+            sellPrice: dexSellPrice,
+
+            usdtAmount,
+            tokenAmount: tokenOutput,
+
+            capital: cost,
+            finalValue,
+            grossResult,
+            spread,
+
+            route: `${quote.exchange} → ${DEX}`,
+            operationRoute: `${quote.exchange} → ${DEX}`,
+            arrow: '→'
+          });
+        }
+      }
     }
 
     return result.sort((a, b) => b.spread - a.spread);
@@ -228,19 +286,17 @@ rightPrice: dexBuyPrice,
     const cap = capital();
     const pair = $('dexPair')?.value || 'USDT/BRLA';
 
-    const sections = newlyNegative.map(item => {
-      return [
-        `🔻 ${bold(item.operationRoute)}`,
-        '━━━━━━━━━━━━━━━━━━',
-        `📉 ${bold('Spread negativo:')} ${bold(item.spread.toFixed(3) + '%')}`,
-        `🛒 ${bold('Compra em:')} ${item.buyLocation}`,
-        `💰 ${bold('Preço de compra:')} ${price(item.buyPrice)}`,
-        `🔄 ${bold('Venda em:')} ${item.sellLocation}`,
-        `💰 ${bold('Preço de venda:')} ${price(item.sellPrice)}`,
-        `🪙 ${bold('Quantidade estimada:')} ${quantity(item.usdtAmount)} USDT`,
-        `💸 ${bold('Resultado bruto estimado:')} ${money(item.grossResult)}`
-      ].join('\n');
-    });
+    const sections = newlyNegative.map(item => [
+      `🔻 ${bold(item.operationRoute)}`,
+      '━━━━━━━━━━━━━━━━━━',
+      `📉 ${bold('Spread negativo:')} ${bold(item.spread.toFixed(3) + '%')}`,
+      `🛒 ${bold('Compra em:')} ${item.buyLocation}`,
+      `💰 ${bold('Preço de compra:')} ${price(item.buyPrice)}`,
+      `🔄 ${bold('Venda em:')} ${item.sellLocation}`,
+      `💰 ${bold('Preço de venda:')} ${price(item.sellPrice)}`,
+      `🪙 ${bold('Quantidade estimada:')} ${quantity(item.usdtAmount)} USDT`,
+      `💸 ${bold('Resultado bruto estimado:')} ${money(item.grossResult)}`
+    ].join('\n'));
 
     const message = [
       `🚨 ${bold('ALERTA DEX — SPREAD NEGATIVO')}`,
@@ -362,7 +418,7 @@ rightPrice: dexBuyPrice,
               <span>Preço: ${price(item.leftPrice)}</span>
             </div>
 
-            <div class="exchange-arrow">→</div>
+            <div class="exchange-arrow">${item.arrow}</div>
 
             <div class="exchange-side sell-side">
               <small>${safe(item.rightAction)}</small>
@@ -458,17 +514,18 @@ rightPrice: dexBuyPrice,
 
       const validQuotes = quotes.filter(quote =>
         CEX.includes(quote.exchange) &&
-        Number(quote.bid) > 0
+        Number(quote.bid) > 0 &&
+        Number(quote.ask) > 0
       );
 
       if (!validQuotes.length) {
         throw new Error('Nenhuma cotação CEX válida.');
       }
 
-      // Estima a quantidade de USDT equivalente ao capital.
+      // Estima a quantidade de USDT para a segunda direção.
       const average = validQuotes.reduce((sum, quote) =>
         sum + (
-          (Number(quote.ask) + Number(quote.bid || quote.ask)) / 2
+          (Number(quote.ask) + Number(quote.bid)) / 2
         ), 0
       ) / validQuotes.length;
 
@@ -509,10 +566,14 @@ rightPrice: dexBuyPrice,
       render();
 
       if (status) {
+        const buyOK =
+          dexData.directions.tokenToUsdt?.status === 'OK';
+
+        const sellOK =
+          dexData.directions.usdtToToken?.status === 'OK';
+
         status.textContent =
-          dexData.status === 'OK'
-            ? 'Cotações recebidas · Polygon · Duas direções monitoradas'
-            : 'Cotação parcial · confira as duas direções';
+          `LlamaSwap · Compra: ${buyOK ? 'OK' : 'ERRO'} · Venda: ${sellOK ? 'OK' : 'ERRO'} · Referência: R$ ${DEX_REFERENCE_DIFFERENCE.toFixed(2)} / ${DEX_REFERENCE_USDT} USDT`;
       }
 
     } catch (error) {
