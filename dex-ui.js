@@ -1,4 +1,3 @@
-
 (() => {
   const $ = id => document.getElementById(id);
 
@@ -23,9 +22,11 @@
 
   let opportunities = [];
   let busy = false;
-  let lastNegativeDexAlerts = new Set();
 
-  // Retorna o limite conforme a corretora
+  // Evita repetir alertas da mesma rota durante cinco minutos.
+  const NEGATIVE_ALERT_COOLDOWN_MS = 5 * 60 * 1000;
+  const lastNegativeDexAlertAt = new Map();
+
   function thresholdForExchange(exchange) {
     return exchange === 'MEXC'
       ? MEXC_ALERT_THRESHOLD
@@ -120,10 +121,7 @@
 
     const result = [];
 
-    // DIREÇÃO 1:
-    // COMPRA USDT NA LLAMASWAP
-    // VENDE USDT NA CORRETORA
-
+    // DIREÇÃO 1: COMPRA USDT NA LLAMASWAP E VENDE NA CORRETORA
     const dexBuy = directions.tokenToUsdt;
 
     if (dexBuy?.status === 'OK') {
@@ -142,45 +140,33 @@
           if (!CEX.includes(quote.exchange)) continue;
 
           const bid = Number(quote.bid);
-
           if (!(bid > 0) || !Number.isFinite(bid)) continue;
 
           const finalValue = usdtAmount * bid;
           const grossResult = finalValue - tokenInput;
           const spread = (grossResult / tokenInput) * 100;
 
-          if (
-            !Number.isFinite(spread) ||
-            !Number.isFinite(grossResult)
-          ) continue;
+          if (!Number.isFinite(spread) || !Number.isFinite(grossResult)) continue;
 
           result.push({
             exchange: quote.exchange,
             direction: 'DEX_TO_CEX',
-
             leftName: quote.exchange,
             rightName: DEX,
-
             leftAction: 'VENDER USDT',
             rightAction: 'COMPRAR USDT',
-
             leftPrice: bid,
             rightPrice: dexBuyPrice,
-
             buyLocation: DEX,
             sellLocation: quote.exchange,
-
             buyPrice: dexBuyPrice,
             sellPrice: bid,
-
             usdtAmount,
             tokenAmount: tokenInput,
-
             capital: tokenInput,
             finalValue,
             grossResult,
             spread,
-
             route: `${DEX} → ${quote.exchange}`,
             operationRoute: `${DEX} → ${quote.exchange}`,
             arrow: '←'
@@ -189,10 +175,7 @@
       }
     }
 
-    // DIREÇÃO 2:
-    // COMPRA USDT NA CORRETORA
-    // VENDE USDT NA LLAMASWAP
-
+    // DIREÇÃO 2: COMPRA USDT NA CORRETORA E VENDE NA LLAMASWAP
     const dexSell = directions.usdtToToken;
 
     if (dexSell?.status === 'OK') {
@@ -211,7 +194,6 @@
           if (!CEX.includes(quote.exchange)) continue;
 
           const ask = Number(quote.ask);
-
           if (!(ask > 0) || !Number.isFinite(ask)) continue;
 
           const cost = usdtAmount * ask;
@@ -219,38 +201,27 @@
           const grossResult = finalValue - cost;
           const spread = (grossResult / cost) * 100;
 
-          if (
-            !Number.isFinite(spread) ||
-            !Number.isFinite(grossResult)
-          ) continue;
+          if (!Number.isFinite(spread) || !Number.isFinite(grossResult)) continue;
 
           result.push({
             exchange: quote.exchange,
             direction: 'CEX_TO_DEX',
-
             leftName: quote.exchange,
             rightName: DEX,
-
             leftAction: 'COMPRAR USDT',
             rightAction: 'VENDER USDT',
-
             leftPrice: ask,
             rightPrice: dexSellPrice,
-
             buyLocation: quote.exchange,
             sellLocation: DEX,
-
             buyPrice: ask,
             sellPrice: dexSellPrice,
-
             usdtAmount,
             tokenAmount: tokenOutput,
-
             capital: cost,
             finalValue,
             grossResult,
             spread,
-
             route: `${quote.exchange} → ${DEX}`,
             operationRoute: `${quote.exchange} → ${DEX}`,
             arrow: '→'
@@ -268,6 +239,7 @@
 
   async function checkNegativeDexAlerts(items) {
     console.log('[DEX ALERT] Verificando spreads negativos...');
+
     console.log('[DEX ALERT] Limites:', {
       demaisCorretoras: ALERT_THRESHOLD + '%',
       MEXC: MEXC_ALERT_THRESHOLD + '%'
@@ -278,100 +250,48 @@
       return;
     }
 
-    // Diagnóstico dos spreads e respectivos limites
-    console.table(items.map(item => {
-      const threshold = thresholdForExchange(item.exchange);
-
-      return {
-        corretora: item.exchange,
-        direção: item.direction,
-        rota: item.operationRoute,
-        spread: Number(item.spread.toFixed(4)),
-        limite: threshold,
-        atingiuLimite: item.spread <= threshold ? 'SIM' : 'NÃO'
-      };
-    }));
-
-    // Cada corretora utiliza seu próprio limite
     const negative = items.filter(item =>
       Number.isFinite(item.spread) &&
       item.spread <= thresholdForExchange(item.exchange)
     );
 
     console.log(
-      '[DEX ALERT] Rotas que atingiram seus respectivos limites:',
+      '[DEX ALERT] Rotas que atingiram seus limites:',
       negative.length
     );
 
-    if (negative.length) {
-      console.table(negative.map(item => ({
-        corretora: item.exchange,
-        direção: item.direction,
-        spread: item.spread.toFixed(4) + '%',
-        limite: thresholdForExchange(item.exchange) + '%'
-      })));
+    if (!negative.length) {
+      // Não limpar o histórico: evita rearmar o alerta por oscilações
+      // de uma atualização para outra.
+      return;
     }
 
-    const currentKeys = new Set(
-      negative.map(item =>
-        `${item.exchange}|${item.direction}`
-      )
-    );
+    const now = Date.now();
 
-    const newlyNegative = negative.filter(item =>
-      !lastNegativeDexAlerts.has(
-        `${item.exchange}|${item.direction}`
-      )
-    );
+    // A chave identifica corretora + direção. Cada rota tem seu cooldown.
+    const newlyNegative = negative.filter(item => {
+      const key = `${item.exchange}|${item.direction}`;
+      const lastAlert = lastNegativeDexAlertAt.get(key) || 0;
+
+      return now - lastAlert >= NEGATIVE_ALERT_COOLDOWN_MS;
+    });
 
     console.log(
-      '[DEX ALERT] Rotas novas para alertar:',
+      '[DEX ALERT] Rotas liberadas para novo alerta:',
       newlyNegative.length
     );
 
-    // Nenhuma rota atingiu seu limite:
-    // libera os alertas para um próximo cruzamento.
-    if (!negative.length) {
-      lastNegativeDexAlerts = new Set();
+    if (!newlyNegative.length) return;
 
-      console.log(
-        '[DEX ALERT] Nenhuma rota negativa. Alertas rearmados.'
-      );
-
-      return;
-    }
-
-    // As rotas negativas já foram notificadas.
-    if (!newlyNegative.length) {
-      lastNegativeDexAlerts = currentKeys;
-
-      console.log(
-        '[DEX ALERT] Rotas já notificadas. Sem novo envio.'
-      );
-
-      return;
-    }
-
-    // Confirma se o Telegram está disponível.
     if (typeof window.sendTelegramAlert !== 'function') {
       console.error(
-        '[DEX ALERT] ERRO: window.sendTelegramAlert não está disponível.'
+        '[DEX ALERT] window.sendTelegramAlert não está disponível.'
       );
-
-      console.log(
-        '[DEX ALERT] As rotas continuam pendentes para nova tentativa.'
-      );
-
       return;
     }
-
-    console.log(
-      '[DEX ALERT] Função Telegram encontrada. Preparando mensagem...'
-    );
 
     const pair = $('dexPair')?.value || 'USDT/BRLA';
 
-    // Monta uma seção para cada nova rota negativa.
     const sections = newlyNegative.map(item => {
       const threshold = thresholdForExchange(item.exchange);
 
@@ -401,7 +321,7 @@
     ].join('\n');
 
     console.log(
-      '[DEX ALERT] Enviando alerta para o Telegram:',
+      '[DEX ALERT] Enviando alerta:',
       newlyNegative.map(item => ({
         exchange: item.exchange,
         direction: item.direction,
@@ -413,33 +333,26 @@
     try {
       const sent = await window.sendTelegramAlert(message);
 
-      console.log(
-        '[DEX ALERT] Resultado retornado pelo Telegram:',
-        sent
-      );
+      console.log('[DEX ALERT] Resultado do Telegram:', sent);
 
       if (sent === true) {
-        // Só marca como notificadas depois da confirmação.
-        lastNegativeDexAlerts = currentKeys;
+        const sentAt = Date.now();
+
+        newlyNegative.forEach(item => {
+          const key = `${item.exchange}|${item.direction}`;
+          lastNegativeDexAlertAt.set(key, sentAt);
+        });
 
         console.log(
-          '[DEX ALERT] SUCESSO: alerta negativo enviado e registrado.'
+          '[DEX ALERT] SUCESSO: alertas registrados por cinco minutos.'
         );
       } else {
         console.error(
-          '[DEX ALERT] FALHA: Telegram não confirmou o envio. Nova tentativa na próxima atualização.'
+          '[DEX ALERT] Falha no envio. Nova tentativa na próxima atualização.'
         );
       }
-
     } catch (error) {
-      console.error(
-        '[DEX ALERT] Erro durante o envio:',
-        error
-      );
-
-      console.log(
-        '[DEX ALERT] A rota continuará pendente para nova tentativa.'
-      );
+      console.error('[DEX ALERT] Erro durante o envio:', error);
     }
   }
 
@@ -449,7 +362,6 @@
 
   function render() {
     const box = $('dexRows');
-
     if (!box) return;
 
     const buyFilter = $('dexBuyFilter')?.value || 'all';
@@ -457,19 +369,15 @@
 
     const filteredRows = opportunities.filter(item => {
       const buyMatches =
-        buyFilter === 'all' ||
-        item.buyLocation === buyFilter;
+        buyFilter === 'all' || item.buyLocation === buyFilter;
 
       const sellMatches =
-        sellFilter === 'all' ||
-        item.sellLocation === sellFilter;
+        sellFilter === 'all' || item.sellLocation === sellFilter;
 
       return buyMatches && sellMatches;
     });
 
-    const rows = filteredRows.length
-      ? [filteredRows[0]]
-      : [];
+    const rows = filteredRows.length ? [filteredRows[0]] : [];
 
     if (!rows.length) {
       box.innerHTML =
@@ -492,17 +400,11 @@
     }
 
     const best = rows[0];
-
-    const cls = best.spread >= 0
-      ? 'positive'
-      : 'negative';
-
+    const cls = best.spread >= 0 ? 'positive' : 'negative';
     const sign = best.spread > 0 ? '+' : '';
 
     if ($('dexBest')) {
-      $('dexBest').textContent =
-        sign + best.spread.toFixed(3) + '%';
-
+      $('dexBest').textContent = sign + best.spread.toFixed(3) + '%';
       $('dexBest').className = cls;
     }
 
@@ -519,16 +421,12 @@
     }
 
     box.innerHTML = rows.map(item => {
-      const itemClass = item.spread >= 0
-        ? 'positive'
-        : 'negative';
-
+      const itemClass = item.spread >= 0 ? 'positive' : 'negative';
       const spreadSign = item.spread > 0 ? '+' : '';
 
       return `
         <article class="opportunity-card">
           <div class="exchange-comparison">
-
             <div class="exchange-side buy-side">
               <small>${safe(item.leftAction)}</small>
               <strong>${safe(item.leftName)}</strong>
@@ -542,19 +440,10 @@
               <strong>${safe(item.rightName)}</strong>
               <span>Preço: ${price(item.rightPrice)}</span>
             </div>
-
           </div>
 
           <div class="opportunity-details">
             <span>Rota: <b>${safe(item.route)}</b></span>
-
-            <span>
-              Quantidade estimada:
-              <b>${Number(item.usdtAmount).toLocaleString('pt-BR', {
-                minimumFractionDigits: 4,
-                maximumFractionDigits: 4
-              })} USDT</b>
-            </span>
 
             <span>
               Spread:
@@ -603,15 +492,12 @@
     if (busy) return;
 
     busy = true;
-
     const status = $('dexStatus');
 
     try {
       console.log('[DEX] Iniciando atualização das cotações...');
 
-      if (status) {
-        status.textContent = 'Consultando preços...';
-      }
+      if (status) status.textContent = 'Consultando preços...';
 
       const pair = $('dexPair')?.value || 'USDT/BRLA';
       const cap = capital();
@@ -626,9 +512,7 @@
       );
 
       if (!cexResponse.ok) {
-        throw new Error(
-          'Erro na consulta CEX: HTTP ' + cexResponse.status
-        );
+        throw new Error('Erro na consulta CEX: HTTP ' + cexResponse.status);
       }
 
       const cexData = await cexResponse.json();
@@ -644,15 +528,10 @@
         throw new Error('Nenhuma cotação CEX válida.');
       }
 
-      console.log(
-        '[DEX] Cotações CEX válidas:',
-        validQuotes.length
-      );
+      console.log('[DEX] Cotações CEX válidas:', validQuotes.length);
 
       const average = validQuotes.reduce((sum, quote) =>
-        sum + (
-          (Number(quote.ask) + Number(quote.bid)) / 2
-        ), 0
+        sum + ((Number(quote.ask) + Number(quote.bid)) / 2), 0
       ) / validQuotes.length;
 
       const reverseAmount = average > 0
@@ -674,15 +553,12 @@
 
       if (!dexResponse.ok) {
         throw new Error(
-          dexData.error ||
-          'Erro na consulta DEX: HTTP ' + dexResponse.status
+          dexData.error || 'Erro na consulta DEX: HTTP ' + dexResponse.status
         );
       }
 
       if (!dexData.directions) {
-        throw new Error(
-          dexData.error || 'Resposta DEX inválida.'
-        );
+        throw new Error(dexData.error || 'Resposta DEX inválida.');
       }
 
       console.log('[DEX] Status das direções:', {
@@ -698,30 +574,22 @@
       );
 
       await checkNegativeDexAlerts(opportunities);
-
       render();
 
       if (status) {
-        const buyOK =
-          dexData.directions.tokenToUsdt?.status === 'OK';
-
-        const sellOK =
-          dexData.directions.usdtToToken?.status === 'OK';
+        const buyOK = dexData.directions.tokenToUsdt?.status === 'OK';
+        const sellOK = dexData.directions.usdtToToken?.status === 'OK';
 
         status.textContent =
           `LlamaSwap · Compra: ${buyOK ? 'OK' : 'ERRO'} · Venda: ${sellOK ? 'OK' : 'ERRO'} · Referência: R$ ${DEX_REFERENCE_DIFFERENCE.toFixed(2)} / ${DEX_REFERENCE_USDT} USDT`;
       }
-
     } catch (error) {
       console.error('[DEX] Erro na atualização:', error);
 
       opportunities = [];
       render();
 
-      if (status) {
-        status.textContent = error.message;
-      }
-
+      if (status) status.textContent = error.message;
     } finally {
       busy = false;
     }
@@ -742,27 +610,17 @@
 
     configureFilters();
 
-    $('dexPair')?.addEventListener('change', () => {
-      lastNegativeDexAlerts = new Set();
-      refresh();
-    });
-
+    $('dexPair')?.addEventListener('change', refresh);
     $('dexBuyFilter')?.addEventListener('change', render);
     $('dexSellFilter')?.addEventListener('change', render);
-
     $('capital')?.addEventListener('input', render);
 
     refresh();
-
     setInterval(refresh, 20000);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      init,
-      { once: true }
-    );
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
   }
