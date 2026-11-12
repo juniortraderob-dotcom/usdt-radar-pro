@@ -93,133 +93,139 @@
 
 </section>
 
-<!-- OPORTUNIDADES CEX -->
+<!-- PAINÉIS CEX E DEX LADO A LADO -->
 
-<section class="panel" id="opportunities">
+<div class="opportunities-layout">
 
-  <div class="section-title">
-    <h2>Oportunidades CEX</h2>
+  <!-- OPORTUNIDADES CEX -->
 
-    <select id="pair">
-      <option>USDT/BRL</option>
-      <option>USDT/BRLA</option>
-      <option>USDT/BRL1</option>
-      <option>USDT/BRZ</option>
-    </select>
-  </div>
+  <section class="panel" id="opportunities">
 
-  <div class="exchange-filters">
+    <div class="section-title">
+      <h2>Oportunidades CEX</h2>
 
-    <label>
-      Comprar em
-      <select id="buyFilter">
-        <option value="all">Todas as corretoras</option>
+      <select id="pair">
+        <option>USDT/BRL</option>
+        <option>USDT/BRLA</option>
+        <option>USDT/BRL1</option>
+        <option>USDT/BRZ</option>
       </select>
-    </label>
+    </div>
 
-    <label>
-      Vender em
-      <select id="sellFilter">
-        <option value="all">Todas as corretoras</option>
+    <div class="exchange-filters">
+
+      <label>
+        Comprar em
+        <select id="buyFilter">
+          <option value="all">Todas as corretoras</option>
+        </select>
+      </label>
+
+      <label>
+        Vender em
+        <select id="sellFilter">
+          <option value="all">Todas as corretoras</option>
+        </select>
+      </label>
+
+    </div>
+
+    <div id="rows" class="opportunity-list">
+      Aguardando cotações reais...
+    </div>
+
+  </section>
+
+  <!-- OPORTUNIDADES DEX X CEX -->
+
+  <section class="panel dex-opportunities" id="dexOpportunities">
+
+    <div class="section-title">
+
+      <div>
+        <h2>Oportunidades LlamaSwap x CEX</h2>
+
+        <p>
+          Comparação indicativa entre LlamaSwap e corretoras centralizadas
+        </p>
+      </div>
+
+      <select id="dexPair">
+        <option value="USDT/BRLA">USDT/BRLA</option>
+        <option value="USDT/BRZ">USDT/BRZ</option>
       </select>
-    </label>
 
-  </div>
+    </div>
 
-  <div id="rows" class="opportunity-list">
-    Aguardando cotações reais...
-  </div>
+    <div class="dex-network">
+      <span class="network-dot"></span>
+      Rede monitorada:
+      <strong>Polygon</strong>
+    </div>
 
-</section>
+    <div class="exchange-filters">
 
-<!-- OPORTUNIDADES DEX X CEX -->
+      <label>
+        Comprar em
 
-<section class="panel dex-opportunities" id="dexOpportunities">
+        <select id="dexBuyFilter">
 
-  <div class="section-title">
+          <option value="all">Todas as plataformas</option>
 
-    <div>
-      <h2>Oportunidades LlamaSwap x CEX</h2>
+          <optgroup label="CEX">
+            <option>Binance</option>
+            <option>OKX</option>
+            <option>Bybit</option>
+            <option>Bitget</option>
+            <option>MEXC</option>
+            <option>KuCoin</option>
+            <option>Foxbit</option>
+          </optgroup>
 
-      <p>
-        Comparação indicativa entre LlamaSwap e corretoras centralizadas
+          <option value="LlamaSwap">LlamaSwap</option>
+
+        </select>
+      </label>
+
+      <label>
+        Vender em
+
+        <select id="dexSellFilter">
+
+          <option value="all">Todas as plataformas</option>
+
+          <optgroup label="CEX">
+            <option>Binance</option>
+            <option>OKX</option>
+            <option>Bybit</option>
+            <option>Bitget</option>
+            <option>MEXC</option>
+            <option>KuCoin</option>
+            <option>Foxbit</option>
+          </optgroup>
+
+          <option value="LlamaSwap">LlamaSwap</option>
+
+        </select>
+      </label>
+
+    </div>
+
+    <div id="dexRows" class="opportunity-list">
+      <p class="empty-results">
+        Aguardando cotações DEX e CEX...
       </p>
     </div>
 
-    <select id="dexPair">
-      <option value="USDT/BRLA">USDT/BRLA</option>
-      <option value="USDT/BRZ">USDT/BRZ</option>
-    </select>
+    <small>
+      BRLA e BRZ são considerados em paridade indicativa de 1:1 com o real.
+      Lucro bruto, sem desconto de taxas, impacto, liquidez ou transferências.
+      Cotações indicativas, não executam swaps.
+    </small>
 
-  </div>
+  </section>
 
-  <div class="dex-network">
-    <span class="network-dot"></span>
-    Rede monitorada:
-    <strong>Polygon</strong>
-  </div>
-
-  <div class="exchange-filters">
-
-    <label>
-      Comprar em
-
-      <select id="dexBuyFilter">
-
-        <option value="all">Todas as plataformas</option>
-
-        <optgroup label="CEX">
-          <option>Binance</option>
-          <option>OKX</option>
-          <option>Bybit</option>
-          <option>Bitget</option>
-          <option>MEXC</option>
-          <option>KuCoin</option>
-          <option>Foxbit</option>
-        </optgroup>
-
-        <option value="LlamaSwap">LlamaSwap</option>
-
-      </select>
-    </label>
-
-    <label>
-      Vender em
-
-      <select id="dexSellFilter">
-
-        <option value="all">Todas as plataformas</option>
-
-        <optgroup label="CEX">
-          <option>Binance</option>
-          <option>OKX</option>
-          <option>Bybit</option>
-          <option>Bitget</option>
-          <option>MEXC</option>
-          <option>KuCoin</option>
-          <option>Foxbit</option>
-        </optgroup>
-
-        <option value="LlamaSwap">LlamaSwap</option>
-
-      </select>
-    </label>
-
-  </div>
-
-  <div id="dexRows" class="opportunity-list">
-    <p class="empty-results">
-      Aguardando cotações DEX e CEX...
-    </p>
-  </div>
-
-  <small>
-    BRLA e BRZ são considerados em paridade indicativa de 1:1 com o real.
-    Lucro bruto, sem desconto de taxas, impacto, liquidez ou transferências.
-    Cotações indicativas, não executam swaps.
-  </small>
-
-</section>
+</div>
 
 <!-- ESTATÍSTICAS -->
 
