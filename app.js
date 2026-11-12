@@ -306,7 +306,7 @@ function loadAlertSettings() {
     // Depois disso, o usuário ainda pode alterar o campo manualmente.
     // Migra uma configuração antiga (por exemplo, 0,400%) para 0,480%
     // apenas uma vez. Depois, mantém qualquer ajuste manual feito pelo usuário.
-    const migrated = saved.positiveThresholdVersion === 2;
+    const migrated = saved.positiveThresholdVersion === 3;
     const savedThreshold = Number(saved.positiveThreshold);
     const threshold = migrated &&
       Number.isFinite(savedThreshold) &&
@@ -318,7 +318,7 @@ function loadAlertSettings() {
       localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify({
         ...saved,
         positiveThreshold: POSITIVE_ALERT_DEFAULT,
-        positiveThresholdVersion: 2
+        positiveThresholdVersion: 3
       }));
     }
 
