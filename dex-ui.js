@@ -1,3 +1,4 @@
+
 (() => {
   const $ = id => document.getElementById(id);
 
@@ -70,27 +71,24 @@
     const buyFilter = $('dexBuyFilter');
     const sellFilter = $('dexSellFilter');
 
-    // Lado esquerdo: somente corretoras centralizadas (CEX).
-    const cexOptions = [
+    const options = [
       '<option value="all">Todas as corretoras</option>',
       ...CEX.map(name =>
         `<option value="${safe(name)}">${safe(name)}</option>`
-      )
+      ),
+      `<option value="${DEX}">${DEX}</option>`
     ];
 
     if (buyFilter) {
-      const previous = buyFilter.value || 'all';
-      buyFilter.innerHTML = cexOptions.join('');
-      buyFilter.value = CEX.includes(previous) || previous === 'all'
-        ? previous
-        : 'all';
+      const selected = buyFilter.value || 'all';
+      buyFilter.innerHTML = options.join('');
+      buyFilter.value = selected;
     }
 
-    // Lado direito: LlamaSwap é a única opção disponível.
     if (sellFilter) {
-      sellFilter.innerHTML = `<option value="${DEX}">${DEX}</option>`;
-      sellFilter.value = DEX;
-      sellFilter.disabled = true;
+      const selected = sellFilter.value || 'all';
+      sellFilter.innerHTML = options.join('');
+      sellFilter.value = selected;
     }
   }
 
@@ -338,12 +336,19 @@
     if (!box) return;
 
     const buyFilter = $('dexBuyFilter')?.value || 'all';
+    const sellFilter = $('dexSellFilter')?.value || 'all';
 
-    // A comparação visual mantém a CEX à esquerda e a LlamaSwap à direita
-    // nas duas direções. O filtro esquerdo seleciona apenas a corretora.
-    const filteredRows = opportunities.filter(item =>
-      buyFilter === 'all' || item.exchange === buyFilter
-    );
+    const filteredRows = opportunities.filter(item => {
+      const buyMatches =
+        buyFilter === 'all' ||
+        item.buyLocation === buyFilter;
+
+      const sellMatches =
+        sellFilter === 'all' ||
+        item.sellLocation === sellFilter;
+
+      return buyMatches && sellMatches;
+    });
 
     const rows = filteredRows.length
       ? [filteredRows[0]]
