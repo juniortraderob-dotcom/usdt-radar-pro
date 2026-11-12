@@ -157,18 +157,25 @@ function safe(value) {
 }
 
 // Negrito Unicode para Telegram.
-function telegramBold(value) {
-  const normal =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-  const bold =
+function telegramBold(value) {
+  const normal = Array.from(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  );
+
+  const bold = Array.from(
     '𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙' +
     '𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳' +
-    '𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗';
-
-  return String(value).replace(/[A-Za-z0-9]/g, char =>
-    bold[normal.indexOf(char)] || char
+    '𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗'
   );
+
+  const boldMap = new Map(
+    normal.map((char, index) => [char, bold[index]])
+  );
+
+  return Array.from(String(value))
+    .map(char => boldMap.get(char) || char)
+    .join('');
 }
 
 // =====================================================
