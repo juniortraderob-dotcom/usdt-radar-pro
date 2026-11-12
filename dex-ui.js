@@ -26,6 +26,9 @@
   // Evita repetir alertas da mesma rota durante cinco minutos.
   const NEGATIVE_ALERT_COOLDOWN_MS = 5 * 60 * 1000;
   const lastNegativeDexAlertAt = new Map();
+  
+let lastNegativeDexGlobalAlertAt = 0;
+
 
   function thresholdForExchange(exchange) {
     return exchange === 'MEXC'
@@ -282,6 +285,12 @@
     );
 
     if (!newlyNegative.length) return;
+    
+if (now - lastNegativeDexGlobalAlertAt < NEGATIVE_ALERT_COOLDOWN_MS) {
+  console.log('[DEX ALERT] Intervalo geral ativo; aguardando próximo envio.');
+  return;
+}
+
 
     if (typeof window.sendTelegramAlert !== 'function') {
       console.error(
@@ -342,6 +351,9 @@
           const key = `${item.exchange}|${item.direction}`;
           lastNegativeDexAlertAt.set(key, sentAt);
         });
+        
+lastNegativeDexGlobalAlertAt = sentAt;
+
 
         console.log(
           '[DEX ALERT] SUCESSO: alertas registrados por cinco minutos.'
