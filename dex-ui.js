@@ -3,7 +3,10 @@
   const $ = id => document.getElementById(id);
 
   const DEX = 'LlamaSwap';
+
+  // Limites individuais dos alertas negativos
   const ALERT_THRESHOLD = -0.45;
+  const MEXC_ALERT_THRESHOLD = -1.30;
 
   const DEX_REFERENCE_DIFFERENCE = 5.22;
   const DEX_REFERENCE_USDT = 500;
@@ -22,6 +25,13 @@
   let busy = false;
   let lastNegativeDexAlerts = new Set();
 
+  // Retorna o limite conforme a corretora
+  function thresholdForExchange(exchange) {
+    return exchange === 'MEXC'
+      ? MEXC_ALERT_THRESHOLD
+      : ALERT_THRESHOLD;
+  }
+
   const money = n => Number(n).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
@@ -32,11 +42,6 @@
   const price = n => Number(n).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4
-  });
-
-  const quantity = n => Number(n).toLocaleString('pt-BR', {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
   });
@@ -53,7 +58,7 @@
     Math.max(0, Number($('capital')?.value) || 0);
 
   // =====================================================
-  // NEGRITO UNICODE CORRIGIDO
+  // NEGRITO UNICODE
   // =====================================================
 
   function bold(text) {
@@ -73,6 +78,10 @@
       .map(char => boldMap.get(char) || char)
       .join('');
   }
+
+  // =====================================================
+  // FILTROS
+  // =====================================================
 
   function configureFilters() {
     const buyFilter = $('dexBuyFilter');
@@ -259,28 +268,38 @@
 
   async function checkNegativeDexAlerts(items) {
     console.log('[DEX ALERT] Verificando spreads negativos...');
-    console.log('[DEX ALERT] Limite configurado:', ALERT_THRESHOLD + '%');
+    console.log('[DEX ALERT] Limites:', {
+      demaisCorretoras: ALERT_THRESHOLD + '%',
+      MEXC: MEXC_ALERT_THRESHOLD + '%'
+    });
 
     if (!Array.isArray(items)) {
       console.error('[DEX ALERT] Lista de oportunidades inválida.');
       return;
     }
 
-    console.table(items.map(item => ({
-      corretora: item.exchange,
-      direção: item.direction,
-      rota: item.operationRoute,
-      spread: Number(item.spread.toFixed(4)),
-      atingiuLimite: item.spread <= ALERT_THRESHOLD ? 'SIM' : 'NÃO'
-    })));
+    // Diagnóstico dos spreads e respectivos limites
+    console.table(items.map(item => {
+      const threshold = thresholdForExchange(item.exchange);
 
+      return {
+        corretora: item.exchange,
+        direção: item.direction,
+        rota: item.operationRoute,
+        spread: Number(item.spread.toFixed(4)),
+        limite: threshold,
+        atingiuLimite: item.spread <= threshold ? 'SIM' : 'NÃO'
+      };
+    }));
+
+    // Cada corretora utiliza seu próprio limite
     const negative = items.filter(item =>
       Number.isFinite(item.spread) &&
-      item.spread <= ALERT_THRESHOLD
+      item.spread <= thresholdForExchange(item.exchange)
     );
 
     console.log(
-      '[DEX ALERT] Rotas que atingiram o limite:',
+      '[DEX ALERT] Rotas que atingiram seus respectivos limites:',
       negative.length
     );
 
@@ -288,7 +307,8 @@
       console.table(negative.map(item => ({
         corretora: item.exchange,
         direção: item.direction,
-        spread: item.spread.toFixed(4) + '%'
+        spread: item.spread.toFixed(4) + '%',
+        limite: thresholdForExchange(item.exchange) + '%'
       })));
     }
 
@@ -309,6 +329,8 @@
       newlyNegative.length
     );
 
+    // Nenhuma rota atingiu seu limite:
+    // libera os alertas para um próximo cruzamento.
     if (!negative.length) {
       lastNegativeDexAlerts = new Set();
 
@@ -319,23 +341,25 @@
       return;
     }
 
+    // As rotas negativas já foram notificadas.
     if (!newlyNegative.length) {
       lastNegativeDexAlerts = currentKeys;
 
       console.log(
-        '[DEX ALERT] As rotas negativas já foram notificadas. Sem novo envio.'
+        '[DEX ALERT] Rotas já notificadas. Sem novo envio.'
       );
 
       return;
     }
 
+    // Confirma se o Telegram está disponível.
     if (typeof window.sendTelegramAlert !== 'function') {
       console.error(
         '[DEX ALERT] ERRO: window.sendTelegramAlert não está disponível.'
       );
 
       console.log(
-        '[DEX ALERT] As rotas não foram marcadas como notificadas. Tentarei novamente.'
+        '[DEX ALERT] As rotas continuam pendentes para nova tentativa.'
       );
 
       return;
@@ -345,32 +369,35 @@
       '[DEX ALERT] Função Telegram encontrada. Preparando mensagem...'
     );
 
-    const cap = capital();
     const pair = $('dexPair')?.value || 'USDT/BRLA';
 
-    const sections = newlyNegative.map(item => [
-      `🔻 ${bold(item.operationRoute)}`,
-      '━━━━━━━━━━━━━━━━━━',
-      `📉 ${bold('Spread negativo:')} ${bold(item.spread.toFixed(3) + '%')}`,
-      `🛒 ${bold('Compra em:')} ${item.buyLocation}`,
-      `💰 ${bold('Preço de compra:')} ${price(item.buyPrice)}`,
-      `🔄 ${bold('Venda em:')} ${item.sellLocation}`,
-      `💰 ${bold('Preço de venda:')} ${price(item.sellPrice)}`,
-      `🪙 ${bold('Quantidade estimada:')} ${quantity(item.usdtAmount)} USDT`,
-      `💸 ${bold('Resultado bruto estimado:')} ${money(item.grossResult)}`
-    ].join('\n'));
+    // Monta uma seção para cada nova rota negativa.
+    const sections = newlyNegative.map(item => {
+      const threshold = thresholdForExchange(item.exchange);
+
+      return [
+        `🔻 ${bold(item.operationRoute)}`,
+        '━━━━━━━━━━━━━━━━━━',
+        `📉 ${bold('Spread negativo:')} ${bold(item.spread.toFixed(3) + '%')}`,
+        `🎯 ${bold('Gatilho:')} ${threshold.toFixed(3).replace('.', ',')}% ou menor`,
+        `🛒 ${bold('Compra em:')} ${item.buyLocation}`,
+        `💰 ${bold('Preço de compra:')} ${price(item.buyPrice)}`,
+        `🔄 ${bold('Venda em:')} ${item.sellLocation}`,
+        `💰 ${bold('Preço de venda:')} ${price(item.sellPrice)}`,
+        `💸 ${bold('Resultado bruto estimado:')} ${money(item.grossResult)}`
+      ].join('\n');
+    });
 
     const message = [
       `🚨 ${bold('ALERTA DEX — SPREAD NEGATIVO')}`,
       '━━━━━━━━━━━━━━━━━━',
       `📊 ${bold('Par monitorado:')} ${pair}`,
-      `💰 ${bold('Capital de referência:')} ${money(cap)}`,
-      `🎯 ${bold('Gatilho do alerta:')} -0,450% ou menor`,
       '',
       sections.join('\n\n'),
       '',
       `⚠️ ${bold('Atenção:')} cotação indicativa. Confira liquidez, impacto, taxas e limites antes de operar.`,
-      '━━━━━━━━━━━━━━━━━━'
+      '━━━━━━━━━━━━━━━━━━',
+      `🤖 ${bold('USDT RADAR PRO')}`
     ].join('\n');
 
     console.log(
@@ -378,7 +405,8 @@
       newlyNegative.map(item => ({
         exchange: item.exchange,
         direction: item.direction,
-        spread: item.spread
+        spread: item.spread,
+        threshold: thresholdForExchange(item.exchange)
       }))
     );
 
@@ -391,6 +419,7 @@
       );
 
       if (sent === true) {
+        // Só marca como notificadas depois da confirmação.
         lastNegativeDexAlerts = currentKeys;
 
         console.log(
@@ -521,7 +550,10 @@
 
             <span>
               Quantidade estimada:
-              <b>${quantity(item.usdtAmount)} USDT</b>
+              <b>${Number(item.usdtAmount).toLocaleString('pt-BR', {
+                minimumFractionDigits: 4,
+                maximumFractionDigits: 4
+              })} USDT</b>
             </span>
 
             <span>
@@ -703,7 +735,10 @@
     if (!$('dexRows')) return;
 
     console.log('[DEX] Monitor iniciado.');
-    console.log('[DEX] Gatilho negativo:', ALERT_THRESHOLD + '%');
+    console.log('[DEX] Limites negativos:', {
+      demaisCorretoras: ALERT_THRESHOLD + '%',
+      MEXC: MEXC_ALERT_THRESHOLD + '%'
+    });
 
     configureFilters();
 
