@@ -52,17 +52,26 @@
   const capital = () =>
     Math.max(0, Number($('capital')?.value) || 0);
 
+  // =====================================================
+  // NEGRITO UNICODE CORRIGIDO
+  // =====================================================
+
   function bold(text) {
-    const normal =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const normal = Array.from(
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    );
 
-    const strong =
-      '𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗';
+    const strong = Array.from(
+      '𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗'
+    );
 
-    return String(text).replace(/[A-Za-z0-9]/g, char => {
-      const index = normal.indexOf(char);
-      return index >= 0 ? strong[index] : char;
-    });
+    const boldMap = new Map(
+      normal.map((char, index) => [char, strong[index]])
+    );
+
+    return Array.from(String(text))
+      .map(char => boldMap.get(char) || char)
+      .join('');
   }
 
   function configureFilters() {
@@ -257,7 +266,6 @@
       return;
     }
 
-    // Exibe os spreads calculados para diagnóstico.
     console.table(items.map(item => ({
       corretora: item.exchange,
       direção: item.direction,
@@ -301,8 +309,6 @@
       newlyNegative.length
     );
 
-    // Nenhuma rota atingiu o limite:
-    // libera os alertas para um próximo cruzamento.
     if (!negative.length) {
       lastNegativeDexAlerts = new Set();
 
@@ -313,7 +319,6 @@
       return;
     }
 
-    // As rotas negativas já foram notificadas.
     if (!newlyNegative.length) {
       lastNegativeDexAlerts = currentKeys;
 
@@ -324,7 +329,6 @@
       return;
     }
 
-    // Confirma se o Telegram está disponível.
     if (typeof window.sendTelegramAlert !== 'function') {
       console.error(
         '[DEX ALERT] ERRO: window.sendTelegramAlert não está disponível.'
@@ -387,7 +391,6 @@
       );
 
       if (sent === true) {
-        // Só marca como notificadas depois da confirmação.
         lastNegativeDexAlerts = currentKeys;
 
         console.log(
