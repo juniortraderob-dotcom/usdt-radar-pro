@@ -339,7 +339,7 @@ function saveAlertSettings() {
       0,
       Number($('positiveAlertThreshold').value) || 0
     ),
-    positiveThresholdVersion: 2
+    positiveThresholdVersion: 3
   };
 
   localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify(settings));
