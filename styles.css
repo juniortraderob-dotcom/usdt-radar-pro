@@ -739,3 +739,98 @@ footer {
 .dex-opportunities .opportunity-card:hover {
   border-color: #55a9e8 !important;
 }
+
+
+/* LAYOUT LADO A LADO — CEX E DEX */
+
+.opportunities-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 15px 0;
+  align-items: start;
+}
+
+.opportunities-layout > .panel {
+  margin: 0;
+  min-width: 0;
+}
+
+/* AJUSTES PARA TELAS MENORES */
+
+@media (max-width: 800px) {
+  .opportunities-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .opportunities-layout > .panel {
+    padding: 9px;
+  }
+
+  .opportunities-layout .section-title {
+    gap: 6px;
+  }
+
+  .opportunities-layout .section-title h2 {
+    font-size: 15px;
+  }
+
+  .opportunities-layout .section-title p {
+    font-size: 10px;
+  }
+
+  .opportunities-layout .exchange-filters {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 12px 0;
+  }
+
+  .opportunities-layout select {
+    width: 100%;
+    min-width: 0;
+    font-size: 11px;
+    padding: 8px 5px;
+  }
+
+  .opportunities-layout .exchange-side strong {
+    font-size: 14px;
+  }
+
+  .opportunities-layout .exchange-side span {
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .opportunities-layout .exchange-side small {
+    font-size: 9px;
+  }
+
+  .opportunities-layout .exchange-arrow {
+    font-size: 17px;
+  }
+
+  .opportunities-layout .opportunity-card {
+    padding: 9px;
+  }
+
+  .opportunities-layout .opportunity-details {
+    font-size: 10px;
+    gap: 7px;
+  }
+
+  .opportunities-layout .exchange-buttons {
+    gap: 5px;
+  }
+
+  .opportunities-layout .exchange-link {
+    padding: 7px 5px;
+    font-size: 10px;
+  }
+
+  .opportunities-layout .dex-network {
+    flex-wrap: wrap;
+    font-size: 10px;
+    margin-top: 10px;
+  }
+}
