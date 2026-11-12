@@ -1,3 +1,4 @@
+
 const $ = id => document.getElementById(id);
 
 const names = [
@@ -21,8 +22,6 @@ let latestStatuses = {};
 let audioContext = null;
 let soundUnlocked = false;
 
-// Guarda todas as rotas que já dispararam enquanto continuam acima do limite.
-// Uma rota só poderá alertar novamente depois de cair abaixo do limite.
 let activePositiveAlertKeys = new Set();
 
 const POSITIVE_ALERT_DEFAULT = 0.48;
@@ -31,26 +30,96 @@ const ALERT_STORAGE_KEY = 'usdtRadarProAlertSettings';
 const TELEGRAM_WORKER_URL =
   'https://usdt-radar-telegram.juniortraderob.workers.dev';
 
+// =====================================================
+// TELEGRAM
+// =====================================================
+
 async function sendTelegramAlert(message) {
   try {
+    console.log('[TELEGRAM] Iniciando envio...');
+
     const response = await fetch(TELEGRAM_WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ message })
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
 
-    if (!response.ok || !result.ok) {
-      throw new Error(result.error || 'Falha no envio');
+    let result;
+
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        'Resposta inválida do Worker: ' + responseText
+      );
     }
 
+    console.log('[TELEGRAM] Resposta:', {
+      status: response.status,
+      result
+    });
+
+    if (!response.ok || !result.ok) {
+      throw new Error(
+        result.error || 'Falha no envio ao Telegram'
+      );
+    }
+
+    console.log('[TELEGRAM] Mensagem enviada com sucesso.');
+
     return true;
+
   } catch (error) {
-    console.error('Erro ao enviar alerta ao Telegram:', error);
+    console.error('[TELEGRAM] Erro no envio:', error);
+
     return false;
   }
 }
+
+// Disponibiliza a função globalmente para o dex-ui.js.
+window.sendTelegramAlert = sendTelegramAlert;
+
+// =====================================================
+// TESTE MANUAL DO TELEGRAM
+// =====================================================
+
+window.testDexTelegram = async function() {
+  console.log('[DEX TESTE] Iniciando teste do Telegram...');
+
+  const message = [
+    '🧪 TESTE DE ALERTA DEX',
+    '━━━━━━━━━━━━━━━━━━',
+    '',
+    'O envio de mensagens do USDT Radar Pro está funcionando.',
+    '',
+    'Este é um teste de comunicação.',
+    'Gatilho configurado: -0,450%',
+    '',
+    '🤖 USDT RADAR PRO'
+  ].join('\n');
+
+  const result = await window.sendTelegramAlert(message);
+
+  if (result) {
+    console.log(
+      '[DEX TESTE] SUCESSO: mensagem enviada ao Telegram.'
+    );
+  } else {
+    console.error(
+      '[DEX TESTE] FALHA: confira o Worker e os logs.'
+    );
+  }
+
+  return result;
+};
+
+// =====================================================
+// FORMATAÇÃO
+// =====================================================
 
 function money(value) {
   return Number(value).toLocaleString('pt-BR', {
@@ -87,10 +156,11 @@ function safe(value) {
   })[c]);
 }
 
-// Negrito Unicode: funciona sem depender da configuração Markdown do Worker.
+// Negrito Unicode para Telegram.
 function telegramBold(value) {
   const normal =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
   const bold =
     '𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙' +
     '𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳' +
@@ -101,12 +171,18 @@ function telegramBold(value) {
   );
 }
 
+// =====================================================
+// FILTROS
+// =====================================================
+
 function setupFilters() {
   ['buyFilter', 'sellFilter'].forEach(id => {
     names.forEach(name => {
       const option = document.createElement('option');
+
       option.value = name;
       option.textContent = name;
+
       $(id).appendChild(option);
     });
   });
@@ -116,9 +192,15 @@ function setupFilters() {
   }
 }
 
+// =====================================================
+// EXIBIÇÃO DAS CORRETORAS
+// =====================================================
+
 function renderExchanges(statuses) {
   const container = $('exchanges');
+
   if (!container) return;
+
   container.replaceChildren();
 
   names.forEach(name => {
@@ -130,18 +212,22 @@ function renderExchanges(statuses) {
 
     const status = document.createElement('span');
     status.textContent = statuses[name] || 'Integração pendente';
-    status.className = status.textContent === 'Online' ? 'positive' : 'neutral';
+
+    status.className =
+      status.textContent === 'Online'
+        ? 'positive'
+        : 'neutral';
 
     card.append(title, status);
+
     container.appendChild(card);
   });
 }
 
-/*
-  GERA TODAS AS COMBINAÇÕES DIRECIONAIS.
-  Não elimina spreads negativos.
-  Cada direção é calculada com seu próprio ASK e BID.
-*/
+// =====================================================
+// CÁLCULO DAS OPORTUNIDADES
+// =====================================================
+
 function calculateOpportunities(quotes) {
   const results = [];
 
@@ -162,6 +248,7 @@ function calculateOpportunities(quotes) {
 
       const ask = Number(buy.ask);
       const bid = Number(sell.bid);
+
       const spread = ((bid - ask) / ask) * 100;
 
       if (!Number.isFinite(spread)) continue;
@@ -180,8 +267,13 @@ function calculateOpportunities(quotes) {
   return results.sort((a, b) => b.spread - a.spread);
 }
 
+// =====================================================
+// BOTÕES DAS CORRETORAS
+// =====================================================
+
 function exchangeButton(name) {
   const url = tradeUrls[name];
+
   if (!url) return '';
 
   return `
@@ -194,6 +286,10 @@ function exchangeButton(name) {
   `;
 }
 
+// =====================================================
+// CARD PRINCIPAL
+// =====================================================
+
 function createMainCard(item, capital) {
   const gross = capital * item.spread / 100;
   const quantity = capital > 0 ? capital / item.ask : 0;
@@ -205,6 +301,7 @@ function createMainCard(item, capital) {
   return `
     <article class="opportunity-card">
       <div class="exchange-comparison">
+
         <div class="exchange-side buy-side">
           <small>COMPRAR USDT</small>
           <strong>${safe(item.buyExchange)}</strong>
@@ -218,17 +315,32 @@ function createMainCard(item, capital) {
           <strong>${safe(item.sellExchange)}</strong>
           <span>BID: ${priceBRL(item.bid)}</span>
         </div>
+
       </div>
 
       <div class="opportunity-details">
+
         <span>Par: <b>${safe(item.pair)}</b></span>
-        <span>Quantidade estimada: <b>${formatUSDT(quantity)}</b></span>
-        <span>Spread:
-          <b class="${resultClass}">${sign}${item.spread.toFixed(3)}%</b>
+
+        <span>
+          Quantidade estimada:
+          <b>${formatUSDT(quantity)}</b>
         </span>
-        <span>Resultado bruto estimado:
-          <b class="${resultClass}">${money(gross)}</b>
+
+        <span>
+          Spread:
+          <b class="${resultClass}">
+            ${sign}${item.spread.toFixed(3)}%
+          </b>
         </span>
+
+        <span>
+          Resultado bruto estimado:
+          <b class="${resultClass}">
+            ${money(gross)}
+          </b>
+        </span>
+
       </div>
 
       <div class="exchange-buttons">
@@ -239,33 +351,50 @@ function createMainCard(item, capital) {
   `;
 }
 
-/* OUTRAS OPORTUNIDADES */
+// =====================================================
+// OUTRAS OPORTUNIDADES
+// =====================================================
+
 function renderOtherOpportunities(items, capital) {
   const list = $('otherOpportunityList');
+
   if (!list) return;
 
   if (!items.length) {
     list.innerHTML =
       '<p class="empty-results">Nenhuma outra combinação encontrada.</p>';
+
     return;
   }
 
   list.innerHTML = items.map(item => {
     const gross = capital * item.spread / 100;
+
     const isPositive = item.spread > 0;
     const resultClass = isPositive ? 'positive' : 'negative';
     const sign = isPositive ? '+' : '';
 
     return `
       <div style="
-        display:flex;justify-content:space-between;align-items:center;
-        flex-wrap:wrap;gap:10px;padding:12px 4px;
-        border-top:1px solid #273646;font-size:12px;color:#aebdcb;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        flex-wrap:wrap;
+        gap:10px;
+        padding:12px 4px;
+        border-top:1px solid #273646;
+        font-size:12px;
+        color:#aebdcb;
       ">
+
         <span>
-          <b style="color:#edf4f8">${safe(item.buyExchange)}</b>
+          <b style="color:#edf4f8">
+            ${safe(item.buyExchange)}
+          </b>
           →
-          <b style="color:#edf4f8">${safe(item.sellExchange)}</b>
+          <b style="color:#edf4f8">
+            ${safe(item.sellExchange)}
+          </b>
         </span>
 
         <span>${safe(item.pair)}</span>
@@ -274,12 +403,15 @@ function renderOtherOpportunities(items, capital) {
           ${sign}${item.spread.toFixed(3)}%
         </span>
 
-        <span class="${resultClass}">${money(gross)}</span>
+        <span class="${resultClass}">
+          ${money(gross)}
+        </span>
 
         <span style="display:flex;gap:7px;flex-wrap:wrap">
           ${exchangeButton(item.buyExchange)}
           ${exchangeButton(item.sellExchange)}
         </span>
+
       </div>
     `;
   }).join('');
@@ -290,7 +422,10 @@ function renderOtherOpportunities(items, capital) {
   });
 }
 
-/* CONFIGURAÇÃO DOS ALERTAS */
+// =====================================================
+// CONFIGURAÇÃO DOS ALERTAS
+// =====================================================
+
 function loadAlertSettings() {
   const defaults = {
     positiveEnabled: false,
@@ -302,12 +437,9 @@ function loadAlertSettings() {
       localStorage.getItem(ALERT_STORAGE_KEY) || '{}'
     );
 
-    // Se já existia uma configuração antiga, ela é atualizada para 0,48%.
-    // Depois disso, o usuário ainda pode alterar o campo manualmente.
-    // Migra uma configuração antiga (por exemplo, 0,400%) para 0,480%
-    // apenas uma vez. Depois, mantém qualquer ajuste manual feito pelo usuário.
     const migrated = saved.positiveThresholdVersion === 3;
     const savedThreshold = Number(saved.positiveThreshold);
+
     const threshold = migrated &&
       Number.isFinite(savedThreshold) &&
       savedThreshold >= 0
@@ -315,11 +447,14 @@ function loadAlertSettings() {
         : POSITIVE_ALERT_DEFAULT;
 
     if (!migrated) {
-      localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify({
-        ...saved,
-        positiveThreshold: POSITIVE_ALERT_DEFAULT,
-        positiveThresholdVersion: 3
-      }));
+      localStorage.setItem(
+        ALERT_STORAGE_KEY,
+        JSON.stringify({
+          ...saved,
+          positiveThreshold: POSITIVE_ALERT_DEFAULT,
+          positiveThresholdVersion: 3
+        })
+      );
     }
 
     return {
@@ -327,6 +462,7 @@ function loadAlertSettings() {
       positiveEnabled: !!saved.positiveEnabled,
       positiveThreshold: threshold
     };
+
   } catch {
     return defaults;
   }
@@ -335,21 +471,32 @@ function loadAlertSettings() {
 function saveAlertSettings() {
   const settings = {
     positiveEnabled: $('positiveAlertEnabled').checked,
+
     positiveThreshold: Math.max(
       0,
       Number($('positiveAlertThreshold').value) || 0
     ),
+
     positiveThresholdVersion: 3
   };
 
-  localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify(settings));
+  localStorage.setItem(
+    ALERT_STORAGE_KEY,
+    JSON.stringify(settings)
+  );
+
   return settings;
 }
+
+// =====================================================
+// PAINEL DE ALERTAS
+// =====================================================
 
 function ensureAlertPanel() {
   if ($('soundAlertsPanel')) return;
 
   const panel = document.createElement('section');
+
   panel.id = 'soundAlertsPanel';
   panel.className = 'panel';
 
@@ -361,7 +508,9 @@ function ensureAlertPanel() {
     </p>
 
     <div class="alert-settings-grid">
+
       <div class="alert-setting">
+
         <label class="check">
           <input id="positiveAlertEnabled" type="checkbox">
           Ativar alerta de spread positivo
@@ -383,10 +532,13 @@ function ensureAlertPanel() {
           Configuração inicial: +0,480%. O alerta não se repete
           enquanto a mesma rota permanecer acima do limite.
         </small>
+
       </div>
+
     </div>
 
     <div class="alert-actions">
+
       <button type="button" id="enableSoundButton">
         Ativar som neste navegador
       </button>
@@ -394,6 +546,7 @@ function ensureAlertPanel() {
       <span id="soundStatus" class="neutral">
         Som ainda não autorizado
       </span>
+
     </div>
 
     <small>
@@ -411,6 +564,7 @@ function ensureAlertPanel() {
   }
 
   const style = document.createElement('style');
+
   style.textContent = `
     .alert-settings-grid {
       display:grid;
@@ -459,25 +613,42 @@ function ensureAlertPanel() {
       }
     }
   `;
+
   document.head.appendChild(style);
 
   const saved = loadAlertSettings();
-  $('positiveAlertEnabled').checked = saved.positiveEnabled;
-  $('positiveAlertThreshold').value = saved.positiveThreshold.toFixed(3);
 
-  ['positiveAlertEnabled', 'positiveAlertThreshold'].forEach(id => {
+  $('positiveAlertEnabled').checked = saved.positiveEnabled;
+
+  $('positiveAlertThreshold').value =
+    saved.positiveThreshold.toFixed(3);
+
+  [
+    'positiveAlertEnabled',
+    'positiveAlertThreshold'
+  ].forEach(id => {
+
     $(id).addEventListener('change', () => {
       saveAlertSettings();
       activePositiveAlertKeys = new Set();
     });
+
     $(id).addEventListener('input', () => {
       saveAlertSettings();
       activePositiveAlertKeys = new Set();
     });
+
   });
 
-  $('enableSoundButton').addEventListener('click', unlockSound);
+  $('enableSoundButton').addEventListener(
+    'click',
+    unlockSound
+  );
 }
+
+// =====================================================
+// ÁUDIO
+// =====================================================
 
 async function unlockSound() {
   try {
@@ -488,7 +659,9 @@ async function unlockSound() {
       throw new Error('Áudio não suportado neste navegador');
     }
 
-    if (!audioContext) audioContext = new AudioContextClass();
+    if (!audioContext) {
+      audioContext = new AudioContextClass();
+    }
 
     if (audioContext.state === 'suspended') {
       await audioContext.resume();
@@ -500,12 +673,17 @@ async function unlockSound() {
       throw new Error('Não foi possível liberar o áudio');
     }
 
-    $('soundStatus').textContent = 'Som ativado neste navegador';
+    $('soundStatus').textContent =
+      'Som ativado neste navegador';
+
     $('soundStatus').className = 'positive';
+
     playTone();
+
   } catch (error) {
     $('soundStatus').textContent =
       error.message || 'Falha ao ativar o som';
+
     $('soundStatus').className = 'negative';
   }
 }
@@ -518,6 +696,7 @@ function playTone() {
   ) return;
 
   const now = audioContext.currentTime;
+
   const frequencies = [880, 1174];
 
   frequencies.forEach((frequency, index) => {
@@ -527,23 +706,36 @@ function playTone() {
     oscillator.type = 'sine';
     oscillator.frequency.value = frequency;
 
-    gain.gain.setValueAtTime(0.0001, now + index * 0.18);
-    gain.gain.exponentialRampToValueAtTime(
-      0.16, now + index * 0.18 + 0.025
+    gain.gain.setValueAtTime(
+      0.0001,
+      now + index * 0.18
     );
+
     gain.gain.exponentialRampToValueAtTime(
-      0.0001, now + index * 0.18 + 0.16
+      0.16,
+      now + index * 0.18 + 0.025
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      now + index * 0.18 + 0.16
     );
 
     oscillator.connect(gain);
     gain.connect(audioContext.destination);
 
     oscillator.start(now + index * 0.18);
-    oscillator.stop(now + index * 0.18 + 0.18);
+
+    oscillator.stop(
+      now + index * 0.18 + 0.18
+    );
   });
 }
 
-/* REGRA ESPECIAL DA MEXC PARA ALERTAS */
+// =====================================================
+// REGRA ESPECIAL DA MEXC
+// =====================================================
+
 function getAlertThreshold(item, configuredThreshold) {
   const involvesMexc =
     item.buyExchange.toUpperCase().includes('MEXC') ||
@@ -554,62 +746,63 @@ function getAlertThreshold(item, configuredThreshold) {
     : Number(configuredThreshold) || 0;
 }
 
-/* MENSAGEM DETALHADA DO TELEGRAM */
+// =====================================================
+// MENSAGEM POSITIVA DO TELEGRAM
+// =====================================================
 
-/* NOVO MODELO DE MENSAGEM POSITIVA DO TELEGRAM */
 function buildPositiveTelegramMessage(items, capital, threshold) {
   const sections = items.map(item => {
+
     return [
-      `━━━━━━━━━━━━━━━━━━`,
-      ``,
+      '━━━━━━━━━━━━━━━━━━',
+      '',
       `📊 ${telegramBold('OPERAÇÃO:')} ${telegramBold(
         item.buyExchange.toUpperCase() + ' → ' +
         item.sellExchange.toUpperCase()
       )}`,
-      ``,
+      '',
       `💱 ${telegramBold('Par:')} ${item.pair}`,
-      ``,
+      '',
       `📈 ${telegramBold('SPREAD POSITIVO:')} ${telegramBold(
         '+' + item.spread.toFixed(3) + '%'
       )}`,
-      ``,
-      `━━━━━━━━━━━━━━━━━━`,
-      ``,
+      '',
+      '━━━━━━━━━━━━━━━━━━',
+      '',
       `🛒 ${telegramBold('COMPRAR USDT')}`,
       `${telegramBold('Corretora:')} ${item.buyExchange}`,
       `${telegramBold('Preço ASK:')} ${priceBRL(item.ask)}`,
-      ``,
+      '',
       `💰 ${telegramBold('VENDER USDT')}`,
       `${telegramBold('Corretora:')} ${item.sellExchange}`,
       `${telegramBold('Preço BID:')} ${priceBRL(item.bid)}`
     ].join('\n');
+
   });
 
   return [
     `🟢 ${telegramBold('OPORTUNIDADE DE ARBITRAGEM — USDT RADAR PRO')}`,
-    ``,
+    '',
     sections.join('\n\n'),
-    ``,
-    `━━━━━━━━━━━━━━━━━━`,
-    ``,
+    '',
+    '━━━━━━━━━━━━━━━━━━',
+    '',
     `⚠️ ${telegramBold('Confira a profundidade do livro de ofertas, taxas, liquidez e limites de saque antes de operar.')}`,
-    ``,
+    '',
     `🤖 ${telegramBold('USDT RADAR PRO')}`
   ].join('\n');
 }
 
-/*
-  ALERTA POSITIVO:
-  - Dispara ao cruzar o limite configurado.
-  - Não repete enquanto a mesma rota continuar acima do limite.
-  - Rearma a rota quando ela cair abaixo do limite.
-  - A regra especial da MEXC (mínimo de 1,30%) é preservada.
-*/
+// =====================================================
+// ALERTAS POSITIVOS
+// =====================================================
+
 function checkSoundAlerts(opportunities) {
   if (!$('positiveAlertEnabled')) return;
 
   const settings = {
     positiveEnabled: $('positiveAlertEnabled').checked,
+
     positiveThreshold: Math.max(
       0,
       Number($('positiveAlertThreshold').value) || 0
@@ -633,11 +826,14 @@ function checkSoundAlerts(opportunities) {
 
   const currentKeys = new Set(
     qualifying.map(item =>
-      [item.buyExchange, item.sellExchange, item.pair].join(':')
+      [
+        item.buyExchange,
+        item.sellExchange,
+        item.pair
+      ].join(':')
     )
   );
 
-  // Só as rotas que não estavam qualificadas na verificação anterior são novas.
   const newlyQualified = qualifying.filter(item => {
     const key = [
       item.buyExchange,
@@ -648,32 +844,40 @@ function checkSoundAlerts(opportunities) {
     return !activePositiveAlertKeys.has(key);
   });
 
-  // Atualiza o conjunto em toda consulta: rotas que caíram abaixo do limite
-  // saem do conjunto e poderão alertar novamente se cruzarem o limite depois.
   activePositiveAlertKeys = currentKeys;
 
   if (!newlyQualified.length) return;
 
-  // Um único som por ciclo de detecção, mesmo que várias rotas cruzem juntas.
   playTone();
 
-  const capital = Math.max(0, Number($('capital')?.value) || 0);
+  const capital = Math.max(
+    0,
+    Number($('capital')?.value) || 0
+  );
+
   const message = buildPositiveTelegramMessage(
     newlyQualified,
     capital,
     settings.positiveThreshold
   );
 
-  // O envio é assíncrono; falhas são registradas sem interromper o radar.
   sendTelegramAlert(message);
 }
 
-/* MENSAGEM QUANDO NÃO HÁ COTAÇÃO */
+// =====================================================
+// MENSAGEM QUANDO NÃO HÁ COTAÇÃO
+// =====================================================
+
 function getNoQuoteMessage(buy, sell) {
   const selectedExchanges = [];
 
-  if (buy !== 'all') selectedExchanges.push(buy);
-  if (sell !== 'all') selectedExchanges.push(sell);
+  if (buy !== 'all') {
+    selectedExchanges.push(buy);
+  }
+
+  if (sell !== 'all') {
+    selectedExchanges.push(sell);
+  }
 
   const unavailable = selectedExchanges.filter(name =>
     latestStatuses[name] &&
@@ -691,16 +895,31 @@ function getNoQuoteMessage(buy, sell) {
   return 'Nenhuma cotação válida encontrada para essa combinação de corretoras.';
 }
 
-/* RENDERIZAÇÃO DAS OPORTUNIDADES */
+// =====================================================
+// RENDERIZAÇÃO DAS OPORTUNIDADES
+// =====================================================
+
 function renderOpportunities() {
-  const capital = Math.max(0, Number($('capital').value) || 0);
+  const capital = Math.max(
+    0,
+    Number($('capital').value) || 0
+  );
+
   const buy = $('buyFilter').value;
   const sell = $('sellFilter').value;
-  const hasManualFilter = buy !== 'all' || sell !== 'all';
+
+  const hasManualFilter =
+    buy !== 'all' || sell !== 'all';
 
   const selected = latestOpportunities.filter(item => {
-    if (buy !== 'all' && item.buyExchange !== buy) return false;
-    if (sell !== 'all' && item.sellExchange !== sell) return false;
+    if (buy !== 'all' && item.buyExchange !== buy) {
+      return false;
+    }
+
+    if (sell !== 'all' && item.sellExchange !== sell) {
+      return false;
+    }
+
     return true;
   });
 
@@ -723,6 +942,7 @@ function renderOpportunities() {
     `;
 
     renderOtherOpportunities([], capital);
+
     $('best').textContent = '—';
     $('best').className = 'neutral';
 
@@ -743,21 +963,33 @@ function renderOpportunities() {
   const best = filtered[0];
   const others = filtered.slice(1);
 
-  $('rows').innerHTML = createMainCard(best, capital);
+  $('rows').innerHTML =
+    createMainCard(best, capital);
+
   renderOtherOpportunities(others, capital);
 
   const gross = capital * best.spread / 100;
+
   const isPositive = best.spread > 0;
   const resultClass = isPositive ? 'positive' : 'negative';
   const sign = isPositive ? '+' : '';
 
-  $('best').textContent = sign + best.spread.toFixed(3) + '%';
+  $('best').textContent =
+    sign + best.spread.toFixed(3) + '%';
+
   $('best').className = resultClass;
-  $('profit').textContent = 'Resultado bruto estimado: ' + money(gross);
+
+  $('profit').textContent =
+    'Resultado bruto estimado: ' + money(gross);
+
   $('route').textContent =
     best.buyExchange + ' → ' + best.sellExchange;
 
-  const cost = Math.max(0, Number($('cost').value) || 0);
+  const cost = Math.max(
+    0,
+    Number($('cost').value) || 0
+  );
+
   $('net').textContent = $('includeCosts').checked
     ? money(gross - cost)
     : 'Desativado';
@@ -769,12 +1001,16 @@ function renderOpportunities() {
     ' · ' + sign + best.spread.toFixed(3) + '%';
 }
 
-/* CONSULTA DA API */
+// =====================================================
+// CONSULTA DA API
+// =====================================================
+
 async function refresh() {
   $('updated').textContent = 'Consultando...';
 
   try {
     const pair = $('pair').value;
+
     const response = await fetch(
       '/api/markets?pair=' + encodeURIComponent(pair),
       { cache: 'no-store' }
@@ -787,6 +1023,7 @@ async function refresh() {
     const data = await response.json();
 
     latestStatuses = data.statuses || {};
+
     const quotes = data.quotes || [];
 
     renderExchanges(latestStatuses);
@@ -794,51 +1031,80 @@ async function refresh() {
     const onlineCount = Object.values(latestStatuses)
       .filter(status => status === 'Online').length;
 
-    $('online').textContent = onlineCount + ' / ' + names.length;
+    $('online').textContent =
+      onlineCount + ' / ' + names.length;
 
-    latestOpportunities = calculateOpportunities(quotes);
+    latestOpportunities =
+      calculateOpportunities(quotes);
 
     checkSoundAlerts(latestOpportunities);
+
     renderOpportunities();
 
     $('updated').textContent =
       new Date().toLocaleTimeString('pt-BR');
+
   } catch (error) {
     console.error(error);
+
     $('updated').textContent = 'Erro na consulta';
+
     $('rows').textContent =
       'Não foi possível consultar a API. Tente novamente.';
   }
 }
 
-/* INICIALIZAÇÃO */
+// =====================================================
+// INICIALIZAÇÃO
+// =====================================================
+
 setupFilters();
+
 ensureAlertPanel();
 
 $('refresh').addEventListener('click', refresh);
+
 $('pair').addEventListener('change', () => {
-  // Ao mudar o par, as rotas antigas não devem bloquear alertas do novo par.
   activePositiveAlertKeys.clear();
   refresh();
 });
 
-$('buyFilter').addEventListener('change', renderOpportunities);
-$('sellFilter').addEventListener('change', renderOpportunities);
+$('buyFilter').addEventListener(
+  'change',
+  renderOpportunities
+);
 
-$('capital').addEventListener('input', renderOpportunities);
-$('cost').addEventListener('input', renderOpportunities);
+$('sellFilter').addEventListener(
+  'change',
+  renderOpportunities
+);
+
+$('capital').addEventListener(
+  'input',
+  renderOpportunities
+);
+
+$('cost').addEventListener(
+  'input',
+  renderOpportunities
+);
 
 $('includeCosts').addEventListener('change', () => {
   $('cost').disabled = !$('includeCosts').checked;
   renderOpportunities();
 });
 
-/* MENU MOBILE */
+// =====================================================
+// MENU MOBILE
+// =====================================================
+
 const sidebar = $('sidebar');
 
 const backdrop = document.createElement('div');
+
 backdrop.className = 'menu-backdrop';
 backdrop.hidden = true;
+
 document.body.appendChild(backdrop);
 
 function closeMenu() {
@@ -847,17 +1113,26 @@ function closeMenu() {
 }
 
 $('menu').addEventListener('click', () => {
-  const opening = !sidebar.classList.contains('open');
+  const opening =
+    !sidebar.classList.contains('open');
+
   sidebar.classList.toggle('open', opening);
+
   backdrop.hidden = !opening;
 });
 
 backdrop.addEventListener('click', closeMenu);
+
 sidebar.querySelectorAll('a').forEach(link => {
   link.addEventListener('click', closeMenu);
 });
 
+// =====================================================
+// INÍCIO DO RADAR
+// =====================================================
+
 renderExchanges({});
+
 refresh();
 
 // Atualização automática a cada 20 segundos.
