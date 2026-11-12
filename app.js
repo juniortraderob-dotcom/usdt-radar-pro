@@ -555,33 +555,46 @@ function getAlertThreshold(item, configuredThreshold) {
 }
 
 /* MENSAGEM DETALHADA DO TELEGRAM */
+
+/* NOVO MODELO DE MENSAGEM POSITIVA DO TELEGRAM */
 function buildPositiveTelegramMessage(items, capital, threshold) {
   const sections = items.map(item => {
-    const quantity = capital > 0 ? capital / item.ask : 0;
-    const gross = capital * item.spread / 100;
-
     return [
-      `🟢 ${telegramBold(item.buyExchange + ' → ' + item.sellExchange)}`,
       `━━━━━━━━━━━━━━━━━━`,
-      `📊 ${telegramBold('Spread:')} ${telegramBold('+' + item.spread.toFixed(3) + '%')}`,
-      `🛒 ${telegramBold('Compra (ASK):')} ${priceBRL(item.ask)}`,
-      `💰 ${telegramBold('Venda (BID):')} ${priceBRL(item.bid)}`,
-      `🪙 ${telegramBold('Quantidade estimada:')} ${formatUSDT(quantity)}`,
-      `📈 ${telegramBold('Resultado bruto:')} ${money(gross)}`
+      ``,
+      `📊 ${telegramBold('OPERAÇÃO:')} ${telegramBold(
+        item.buyExchange.toUpperCase() + ' → ' +
+        item.sellExchange.toUpperCase()
+      )}`,
+      ``,
+      `💱 ${telegramBold('Par:')} ${item.pair}`,
+      ``,
+      `📈 ${telegramBold('SPREAD POSITIVO:')} ${telegramBold(
+        '+' + item.spread.toFixed(3) + '%'
+      )}`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `🛒 ${telegramBold('COMPRAR USDT')}`,
+      `${telegramBold('Corretora:')} ${item.buyExchange}`,
+      `${telegramBold('Preço ASK:')} ${priceBRL(item.ask)}`,
+      ``,
+      `💰 ${telegramBold('VENDER USDT')}`,
+      `${telegramBold('Corretora:')} ${item.sellExchange}`,
+      `${telegramBold('Preço BID:')} ${priceBRL(item.bid)}`
     ].join('\n');
   });
 
   return [
-    `🚨 ${telegramBold('OPORTUNIDADE POSITIVA — USDT RADAR PRO')}`,
-    `━━━━━━━━━━━━━━━━━━`,
-    `🔎 ${telegramBold('Par:')} ${items[0].pair}`,
-    `💵 ${telegramBold('Capital de referência:')} ${money(capital)}`,
-    `🎯 ${telegramBold('Limite configurado:')} +${threshold.toFixed(3)}%`,
+    `🟢 ${telegramBold('OPORTUNIDADE DE ARBITRAGEM — USDT RADAR PRO')}`,
     ``,
     sections.join('\n\n'),
     ``,
-    `⚠️ ${telegramBold('Atenção:')} confira profundidade, taxas, limites e preço atualizado antes de operar.`,
-    `━━━━━━━━━━━━━━━━━━`
+    `━━━━━━━━━━━━━━━━━━`,
+    ``,
+    `⚠️ ${telegramBold('Confira a profundidade do livro de ofertas, taxas, liquidez e limites de saque antes de operar.')}`,
+    ``,
+    `🤖 ${telegramBold('USDT RADAR PRO')}`
   ].join('\n');
 }
 
