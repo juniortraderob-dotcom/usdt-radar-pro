@@ -5,8 +5,6 @@
   const DEX = 'LlamaSwap';
   const ALERT_THRESHOLD = -0.45;
 
-  // Referência observada na LlamaSwap:
-  // diferença média de R$ 5,22 para 500 USDT.
   const DEX_REFERENCE_DIFFERENCE = 5.22;
   const DEX_REFERENCE_USDT = 500;
 
@@ -104,11 +102,9 @@
 
     const result = [];
 
-    // ---------------------------------------------------
     // DIREÇÃO 1:
     // COMPRA USDT NA LLAMASWAP
-    // VENDE USDT NA CORRETORA (BID)
-    // ---------------------------------------------------
+    // VENDE USDT NA CORRETORA
 
     const dexBuy = directions.tokenToUsdt;
 
@@ -175,11 +171,9 @@
       }
     }
 
-    // ---------------------------------------------------
     // DIREÇÃO 2:
-    // COMPRA USDT NA CORRETORA (ASK)
+    // COMPRA USDT NA CORRETORA
     // VENDE USDT NA LLAMASWAP
-    // ---------------------------------------------------
 
     const dexSell = directions.usdtToToken;
 
@@ -255,9 +249,40 @@
   // =====================================================
 
   async function checkNegativeDexAlerts(items) {
-    const negative = items.filter(
-      item => item.spread <= ALERT_THRESHOLD
+    console.log('[DEX ALERT] Verificando spreads negativos...');
+    console.log('[DEX ALERT] Limite configurado:', ALERT_THRESHOLD + '%');
+
+    if (!Array.isArray(items)) {
+      console.error('[DEX ALERT] Lista de oportunidades inválida.');
+      return;
+    }
+
+    // Exibe os spreads calculados para diagnóstico.
+    console.table(items.map(item => ({
+      corretora: item.exchange,
+      direção: item.direction,
+      rota: item.operationRoute,
+      spread: Number(item.spread.toFixed(4)),
+      atingiuLimite: item.spread <= ALERT_THRESHOLD ? 'SIM' : 'NÃO'
+    })));
+
+    const negative = items.filter(item =>
+      Number.isFinite(item.spread) &&
+      item.spread <= ALERT_THRESHOLD
     );
+
+    console.log(
+      '[DEX ALERT] Rotas que atingiram o limite:',
+      negative.length
+    );
+
+    if (negative.length) {
+      console.table(negative.map(item => ({
+        corretora: item.exchange,
+        direção: item.direction,
+        spread: item.spread.toFixed(4) + '%'
+      })));
+    }
 
     const currentKeys = new Set(
       negative.map(item =>
@@ -271,17 +296,50 @@
       )
     );
 
-    if (!newlyNegative.length) {
-      lastNegativeDexAlerts = currentKeys;
+    console.log(
+      '[DEX ALERT] Rotas novas para alertar:',
+      newlyNegative.length
+    );
+
+    // Nenhuma rota atingiu o limite:
+    // libera os alertas para um próximo cruzamento.
+    if (!negative.length) {
+      lastNegativeDexAlerts = new Set();
+
+      console.log(
+        '[DEX ALERT] Nenhuma rota negativa. Alertas rearmados.'
+      );
+
       return;
     }
 
-    if (typeof window.sendTelegramAlert !== 'function') {
-      console.warn(
-        'Telegram não disponível: sendTelegramAlert() não encontrada.'
+    // As rotas negativas já foram notificadas.
+    if (!newlyNegative.length) {
+      lastNegativeDexAlerts = currentKeys;
+
+      console.log(
+        '[DEX ALERT] As rotas negativas já foram notificadas. Sem novo envio.'
       );
+
       return;
     }
+
+    // Confirma se o Telegram está disponível.
+    if (typeof window.sendTelegramAlert !== 'function') {
+      console.error(
+        '[DEX ALERT] ERRO: window.sendTelegramAlert não está disponível.'
+      );
+
+      console.log(
+        '[DEX ALERT] As rotas não foram marcadas como notificadas. Tentarei novamente.'
+      );
+
+      return;
+    }
+
+    console.log(
+      '[DEX ALERT] Função Telegram encontrada. Preparando mensagem...'
+    );
 
     const cap = capital();
     const pair = $('dexPair')?.value || 'USDT/BRLA';
@@ -311,18 +369,45 @@
       '━━━━━━━━━━━━━━━━━━'
     ].join('\n');
 
+    console.log(
+      '[DEX ALERT] Enviando alerta para o Telegram:',
+      newlyNegative.map(item => ({
+        exchange: item.exchange,
+        direction: item.direction,
+        spread: item.spread
+      }))
+    );
+
     try {
       const sent = await window.sendTelegramAlert(message);
 
-      if (sent) {
+      console.log(
+        '[DEX ALERT] Resultado retornado pelo Telegram:',
+        sent
+      );
+
+      if (sent === true) {
+        // Só marca como notificadas depois da confirmação.
         lastNegativeDexAlerts = currentKeys;
+
+        console.log(
+          '[DEX ALERT] SUCESSO: alerta negativo enviado e registrado.'
+        );
       } else {
         console.error(
-          'O Telegram não confirmou o envio do alerta negativo DEX.'
+          '[DEX ALERT] FALHA: Telegram não confirmou o envio. Nova tentativa na próxima atualização.'
         );
       }
+
     } catch (error) {
-      console.error('Falha no alerta negativo DEX:', error);
+      console.error(
+        '[DEX ALERT] Erro durante o envio:',
+        error
+      );
+
+      console.log(
+        '[DEX ALERT] A rota continuará pendente para nova tentativa.'
+      );
     }
   }
 
@@ -487,6 +572,8 @@
     const status = $('dexStatus');
 
     try {
+      console.log('[DEX] Iniciando atualização das cotações...');
+
       if (status) {
         status.textContent = 'Consultando preços...';
       }
@@ -522,7 +609,11 @@
         throw new Error('Nenhuma cotação CEX válida.');
       }
 
-      // Estima a quantidade de USDT para a segunda direção.
+      console.log(
+        '[DEX] Cotações CEX válidas:',
+        validQuotes.length
+      );
+
       const average = validQuotes.reduce((sum, quote) =>
         sum + (
           (Number(quote.ask) + Number(quote.bid)) / 2
@@ -559,7 +650,17 @@
         );
       }
 
+      console.log('[DEX] Status das direções:', {
+        tokenToUsdt: dexData.directions.tokenToUsdt?.status,
+        usdtToToken: dexData.directions.usdtToToken?.status
+      });
+
       opportunities = calculate(validQuotes, dexData);
+
+      console.log(
+        '[DEX] Total de oportunidades calculadas:',
+        opportunities.length
+      );
 
       await checkNegativeDexAlerts(opportunities);
 
@@ -577,7 +678,7 @@
       }
 
     } catch (error) {
-      console.error('Erro DEX:', error);
+      console.error('[DEX] Erro na atualização:', error);
 
       opportunities = [];
       render();
@@ -597,6 +698,9 @@
 
   function init() {
     if (!$('dexRows')) return;
+
+    console.log('[DEX] Monitor iniciado.');
+    console.log('[DEX] Gatilho negativo:', ALERT_THRESHOLD + '%');
 
     configureFilters();
 
