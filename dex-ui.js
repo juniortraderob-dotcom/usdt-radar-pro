@@ -7,14 +7,13 @@
   const DEX_REFERENCE_DIFFERENCE = 5.22;
   const DEX_REFERENCE_USDT = 500;
 
+  // SOMENTE AS CINCO CORRETORAS MANTIDAS NO RADAR
   const CEX = [
     'Binance',
     'OKX',
     'Bybit',
     'Bitget',
-    'MEXC',
-    'KuCoin',
-    'Foxbit'
+    'MEXC'
   ];
 
   let opportunities = [];
@@ -465,8 +464,7 @@
         opportunities.length
       );
 
-      // IMPORTANTE:
-      // Não existe mais envio de alertas negativos neste arquivo.
+      // Não existe envio de alertas negativos neste arquivo.
       // O monitor automático de alertas positivos é executado
       // separadamente pelo Worker usdt-radar-monitor.
 
@@ -504,6 +502,10 @@
     if (!$('dexRows')) return;
 
     console.log('[DEX] Monitor iniciado.');
+    console.log(
+      '[DEX] Corretoras habilitadas:',
+      CEX.join(', ')
+    );
     console.log(
       '[DEX] Alertas negativos desativados neste arquivo.'
     );
