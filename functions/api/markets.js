@@ -1,7 +1,7 @@
 
 const EXCHANGES = [
   'Binance', 'OKX', 'Bybit', 'Bitget',
-  'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
+  'MEXC'
 ];
 
 const PENDING = 'Integração pendente';
@@ -96,6 +96,7 @@ async function getBinanceQuote() {
   }
 
   const message = String(lastError?.message || 'Binance indisponível');
+
   if (message.includes('HTTP 403')) {
     throw new Error(
       'HTTP 403: Binance bloqueou o acesso do servidor Cloudflare (WAF/região)'
@@ -176,26 +177,6 @@ async function getBitgetQuote() {
   return makeQuote('Bitget', data.data.b, data.data.a);
 }
 
-async function getKucoinQuote() {
-  const data = await fetchJson(
-    'https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=USDT-BRL'
-  );
-
-  if (data.code !== '200000' || !data.data) {
-    throw new Error('Par USDT-BRL indisponível na KuCoin');
-  }
-
-  return makeQuote('KuCoin', data.data.bids, data.data.asks);
-}
-
-async function getFoxbitQuote() {
-  const data = await fetchJson(
-    'https://api.foxbit.com.br/rest/v3/markets/usdtbrl/orderbook?depth=5'
-  );
-
-  return makeQuote('Foxbit', data.bids, data.asks);
-}
-
 function errorMessage(error) {
   return 'Erro: ' +
     String(error?.message || 'Falha na consulta')
@@ -227,9 +208,7 @@ export async function onRequestGet(context) {
       ['OKX', getOkxQuote],
       ['Bybit', getBybitQuote],
       ['Bitget', getBitgetQuote],
-      ['MEXC', getMexcQuote],
-      ['KuCoin', getKucoinQuote],
-      ['Foxbit', getFoxbitQuote]
+      ['MEXC', getMexcQuote]
     ];
 
     const results = await Promise.allSettled(
@@ -248,9 +227,7 @@ export async function onRequestGet(context) {
     });
   } else {
     for (const name of EXCHANGES) {
-      if (name !== 'Bitso') {
-        statuses[name] = 'Par ainda não integrado';
-      }
+      statuses[name] = 'Par ainda não integrado';
     }
   }
 
