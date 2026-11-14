@@ -1,9 +1,8 @@
-
 const $ = id => document.getElementById(id);
 
 const names = [
   'Binance', 'OKX', 'Bybit', 'Bitget',
-  'MEXC', 'KuCoin', 'Foxbit', 'Bitso'
+  'MEXC'
 ];
 
 const tradeUrls = {
@@ -11,10 +10,7 @@ const tradeUrls = {
   OKX: 'https://www.okx.com/trade-spot/usdt-brl',
   Bybit: 'https://www.bybit.com/trade/spot/USDT/BRL',
   Bitget: 'https://www.bitget.com/spot/USDTBRL',
-  MEXC: 'https://www.mexc.com/exchange/BRL_USDT',
-  KuCoin: 'https://www.kucoin.com/trade/USDT-BRL',
-  Foxbit: 'https://foxbit.com.br/',
-  Bitso: 'https://bitso.com/'
+  MEXC: 'https://www.mexc.com/exchange/BRL_USDT'
 };
 
 let latestOpportunities = [];
